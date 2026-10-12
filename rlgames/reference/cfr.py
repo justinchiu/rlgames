@@ -12,6 +12,15 @@ import numpy as np
 from rlgames.core.tree import GameTree, child_values, expected_values, node_policy, reach_probs
 
 
+def regret_matching(regrets: np.ndarray, legal: np.ndarray) -> np.ndarray:
+    """Policy proportional to positive regret, uniform over legal actions where no
+    regret is positive."""
+    positive = np.where(legal, np.maximum(regrets, 0), 0)
+    total = positive.sum(1, keepdims=True)
+    uniform = legal / legal.sum(1, keepdims=True)
+    return np.where(total > 0, positive / np.maximum(total, 1e-300), uniform)
+
+
 @dataclass
 class CFRConfig:
     num_iters: int = 1000
@@ -28,11 +37,7 @@ class CFRPlus:
         self.num_iters = 0
 
     def current_policy(self) -> np.ndarray:
-        positive = np.where(self.tree.infoset_legal, np.maximum(self.regrets, 0), 0)
-        total = positive.sum(1, keepdims=True)
-        legal = self.tree.infoset_legal.astype(np.float64)
-        uniform = legal / legal.sum(1, keepdims=True)
-        return np.where(total > 0, positive / np.maximum(total, 1e-300), uniform)
+        return regret_matching(self.regrets, self.tree.infoset_legal.astype(np.float64))
 
     def average_policy(self) -> np.ndarray:
         total = self.policy_sum.sum(1, keepdims=True)

@@ -15,6 +15,9 @@ exploitability for every game small enough to enumerate. Runs on CPU (Mac), GPU 
 
 ## Workflow
 
+New to these algorithms? [docs/algorithms.md](docs/algorithms.md) is a study guide: policy
+gradient self-play, why it cycles, regularization and MMD, and CFR.
+
 1. **Implement a learning algorithm** in `rlgames/core/learner.py`. `Learner.update` receives a
    batch of self-play games played by the current network and returns new parameters. The
    docstring there describes the batch fields and the JAX/optax plumbing. Algorithm
@@ -44,6 +47,8 @@ exploitability for every game small enough to enumerate. Runs on CPU (Mac), GPU 
   `base.py` documents the interface.
 - `rlgames/core/env.py`: batched self-play rollouts that return a flat `Batch` of decisions.
 - `rlgames/core/learner.py`: the learning algorithm (yours to write).
+- `rlgames/core/cfr.py`: tabular CFR+ (yours to write). `tests/test_cfr.py` compares it,
+  iteration by iteration, to the reference implementation.
 - `rlgames/core/optim.py`: optimizer construction (AdamW, SGD, Muon).
 - `rlgames/core/evaluation.py`: exploitability of a network and return against an opponent.
 - `rlgames/core/tree.py`, `exploitability.py`: exact tree enumeration and best responses.
@@ -72,6 +77,15 @@ A tabular policy is a `float[num_infosets, num_actions]` array.
 `rlgames.core.evaluation.tabulate_policy` builds one from network parameters.
 
 ## Tests
+
+`tests/test_cfr.py` runs every check on both the reference and your `rlgames/core/cfr.py`;
+checks on your code skip until it stops raising `NotImplementedError`:
+
+```
+uv run pytest tests/test_cfr.py -v
+```
+
+Everything:
 
 ```
 uv run pytest
