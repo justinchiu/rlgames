@@ -1,7 +1,8 @@
-"""Tabular CFR+ on an enumerated game tree.
+"""REFERENCE IMPLEMENTATION (spoiler): tabular CFR+ on an enumerated game tree.
 
-Used as a ground-truth equilibrium solver and as a reference curve for the
-learning-dynamics experiments.
+A finished solution, kept to check your own CFR against. On Kuhn poker it reaches
+game value -1/18 for player 0 and exploitability below 1e-3 within a few hundred
+iterations; tests/test_exploitability.py has more target numbers.
 """
 
 from dataclasses import dataclass

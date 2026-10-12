@@ -2,7 +2,7 @@
 
 The tree is expanded breadth-first with the game's own jitted `step`, one depth
 at a time, and flattened into numpy arrays ordered by depth. Exploitability and
-CFR in this package operate on these arrays.
+CFR (rlgames/reference/cfr.py) operate on these arrays.
 """
 
 from dataclasses import dataclass

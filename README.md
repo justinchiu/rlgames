@@ -47,7 +47,9 @@ exploitability for every game small enough to enumerate. Runs on CPU (Mac), GPU 
 - `rlgames/core/optim.py`: optimizer construction (AdamW, SGD, Muon).
 - `rlgames/core/evaluation.py`: exploitability of a network and return against an opponent.
 - `rlgames/core/tree.py`, `exploitability.py`: exact tree enumeration and best responses.
-- `rlgames/core/cfr.py`: tabular CFR+, a reference equilibrium solver.
+- `rlgames/reference/`: **reference implementations (spoilers)** of algorithms you may want
+  to write yourself, kept for checking your answers. Currently `cfr.py` (tabular CFR+).
+  Nothing outside `tests/` imports them.
 - `rlgames/networks/mlp.py`: the policy-value network.
 - `rlgames/play/`: views of each game and the web page for the play server.
 - `scripts/train/selfplay_main.py`, `scripts/play/server.py`: entry points.
@@ -58,7 +60,7 @@ exploitability for every game small enough to enumerate. Runs on CPU (Mac), GPU 
 from rlgames.games import make
 from rlgames.core.tree import enumerate_tree, uniform_policy
 from rlgames.core.exploitability import exploitability
-from rlgames.core.cfr import CFRPlus, CFRConfig
+from rlgames.reference.cfr import CFRPlus, CFRConfig
 
 tree = enumerate_tree(make("leduc_poker"))
 print(exploitability(tree, uniform_policy(tree)))  # 2.3736
