@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rlgames</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e2dd;
+    --accent: #2f6fdf; --accent-text: #ffffff; --p0: #2f6fdf; --p1: #d9572b;
+    --good: #2e8b57; --bad: #c0392b; --cell: #f0efea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161615; --panel: #1f1f1d; --text: #ecebe6; --muted: #9b9a94; --line: #34332f;
+      --accent: #6c9cf0; --accent-text: #0e0e0d; --p0: #6c9cf0; --p1: #f08a5d;
+      --good: #5cc48a; --bad: #ef6f61; --cell: #2a2a27;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+           padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  select, button { font: inherit; color: var(--text); background: var(--panel);
+                   border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  main { display: grid; grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr); gap: 16px; padding: 16px; }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .chart { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .chart .title { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .chart .title b { color: var(--text); font-weight: 600; }
+  canvas { width: 100%; height: 140px; display: block; }
+  .muted { color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  table.info { border-collapse: collapse; width: 100%; margin: 6px 0 10px; }
+  table.info td { padding: 3px 0; border-bottom: 1px solid var(--line); }
+  table.info td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .history { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+             background: var(--cell); border-radius: 6px; padding: 8px; max-height: 220px; overflow: auto; }
+  .result { font-size: 18px; font-weight: 700; margin: 8px 0; }
+  .result.win { color: var(--good); } .result.lose { color: var(--bad); }
+  .grid { display: grid; gap: 4px; margin: 8px 0; max-width: 360px; }
+  .grid button { aspect-ratio: 1; font-size: 22px; font-weight: 700; padding: 0; background: var(--cell); }
+  .grid button.X { color: var(--p0); } .grid button.O { color: var(--p1); }
+  .score { font-variant-numeric: tabular-nums; }
+  .error { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>rlgames</h1>
+  <label>Run <select id="run"></select></label>
+  <span id="runinfo" class="muted"></span>
+</header>
+<main>
+  <section>
+    <h2>Training</h2>
+    <div id="charts" class="charts"></div>
+    <p id="nometrics" class="muted">No metrics yet.</p>
+  </section>
+  <section>
+    <h2>Play against the latest checkpoint</h2>
+    <div class="row">
+      <label>Seat <select id="seat"><option value="0">First (player 0)</option><option value="1">Second (player 1)</option></select></label>
+      <label><input type="checkbox" id="greedy"> AI plays greedily</label>
+      <button class="primary" id="newgame">New game</button>
+    </div>
+    <div class="score muted" id="score"></div>
+    <div id="play" class="muted">Pick a run and start a game.</div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const SKIP = new Set(["iter", "games", "time", "policy"]);
+const LABELS = {
+  exploitability: "Exploitability (exact)", vs_random: "Avg return vs random",
+  entropy: "Policy entropy", game_length: "Game length", p0_return: "Player 0 return (self-play)",
+};
+let run = null, records = [], next = 0, session = null, tally = { games: 0, total: 0, w: 0, l: 0, d: 0 };
+
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+async function api(path, body) {
+  const res = await fetch(path, body ? { method: "POST", body: JSON.stringify(body) } : {});
+  const out = await res.json();
+  if (out && out.error) throw new Error(out.error);
+  return out;
+}
+
+async function loadRuns() {
+  const runs = await api("/api/runs");
+  const sel = $("run"), prev = sel.value;
+  sel.innerHTML = runs.map(r => `<option value="${r.name}">${r.name} — ${r.game}</option>`).join("");
+  if (runs.length === 0) { $("runinfo").textContent = "No runs found in exps_dir."; return; }
+  sel.value = runs.some(r => r.name === prev) ? prev : runs[0].name;
+  if (sel.value !== run) selectRun(sel.value);
+}
+
+function selectRun(name) {
+  run = name; records = []; next = 0; session = null;
+  tally = { games: 0, total: 0, w: 0, l: 0, d: 0 };
+  $("charts").innerHTML = ""; $("play").textContent = "Start a game."; $("score").textContent = "";
+  poll();
+}
+
+let polling = false;
+async function poll() {
+  // One request at a time, and drop responses for a run that is no longer selected.
+  if (!run || polling) return;
+  polling = true;
+  const polled = run;
+  try {
+    const out = await api(`/api/metrics?run=${encodeURIComponent(polled)}&since=${next}`);
+    if (polled !== run) return;
+    records.push(...out.records); next = out.next;
+    if (out.records.length) draw();
+    const last = records[records.length - 1];
+    $("runinfo").textContent = last ? `iter ${last.iter} · ${Math.round(last.games).toLocaleString()} games · ${last.time.toFixed(0)}s` : "";
+  } catch (e) {
+    if (polled === run) $("runinfo").textContent = e.message;
+  } finally {
+    polling = false;
+  }
+  if (polled !== run) poll();
+}
+
+function chartBox(key, title) {
+  let box = $("chart-" + key);
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "chart"; box.id = "chart-" + key;
+    box.innerHTML = `<div class="title"><span>${title}</span><b></b></div><canvas></canvas>`;
+    $("charts").appendChild(box);
+  }
+  return box;
+}
+
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const ctx = canvas.getContext("2d"); ctx.scale(dpr, dpr);
+  return { ctx, w, h };
+}
+
+function fmt(v) {
+  if (v === 0) return "0";
+  const a = Math.abs(v);
+  return a >= 1000 || a < 0.01 ? v.toExponential(1) : v.toPrecision(3);
+}
+
+function lineChart(key) {
+  const pts = records.filter(r => typeof r[key] === "number").map(r => [r.iter, r[key]]);
+  const box = chartBox(key, LABELS[key] || key);
+  box.querySelector("b").textContent = pts.length ? fmt(pts[pts.length - 1][1]) : "";
+  const { ctx, w, h } = setupCanvas(box.querySelector("canvas"));
+  if (pts.length === 0) return;
+  const log = key === "exploitability" && pts.every(p => p[1] > 0);
+  const tf = v => log ? Math.log10(v) : v;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => tf(p[1]));
+  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (x1 === x0) x1 = x0 + 1;
+  if (y1 === y0) { y0 -= 0.5; y1 += 0.5; }
+  const L = 44, R = 6, T = 6, B = 18;
+  const X = x => L + (x - x0) / (x1 - x0) * (w - L - R);
+  const Y = y => T + (1 - (y - y0) / (y1 - y0)) * (h - T - B);
+  ctx.strokeStyle = css("--line"); ctx.fillStyle = css("--muted"); ctx.font = "10px sans-serif";
+  ctx.lineWidth = 1;
+  for (const y of [y0, (y0 + y1) / 2, y1]) {
+    ctx.beginPath(); ctx.moveTo(L, Y(y)); ctx.lineTo(w - R, Y(y)); ctx.stroke();
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    ctx.fillText(fmt(log ? 10 ** y : y), L - 4, Y(y));
+  }
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillText(x0, L, h - 4);
+  ctx.textAlign = "right"; ctx.fillText(x1, w - R, h - 4);
+  ctx.strokeStyle = css("--accent"); ctx.lineWidth = 1.75; ctx.beginPath();
+  pts.forEach((p, i) => i ? ctx.lineTo(X(p[0]), Y(tf(p[1]))) : ctx.moveTo(X(p[0]), Y(tf(p[1]))));
+  ctx.stroke();
+}
+
+// Matrix games: the policy of each player over training. Two actions: a phase plot of
+// P(first action) for player 0 against player 1. Three actions: one simplex per player.
+function policyChart() {
+  const pols = records.filter(r => r.policy).map(r => r.policy);
+  if (pols.length === 0) return;
+  const nA = pols[0][0].length;
+  const box = chartBox("policy", nA === 2 ? "Policy trajectory (P0 vs P1)" : "Policy trajectory (simplex)");
+  box.querySelector("b").textContent = pols[pols.length - 1].map(p => p.map(v => v.toFixed(2)).join("/")).join("  ");
+  const canvas = box.querySelector("canvas"); canvas.style.height = "220px";
+  const { ctx, w, h } = setupCanvas(canvas);
+  const pad = 14, s = Math.min(w, h) - 2 * pad, ox = (w - s) / 2, oy = (h - s) / 2;
+  ctx.lineWidth = 1; ctx.strokeStyle = css("--line"); ctx.fillStyle = css("--muted"); ctx.font = "10px sans-serif";
+  let project;
+  if (nA === 2) {
+    ctx.strokeRect(ox, oy, s, s);
+    ctx.fillText("P0 →", ox + s - 24, oy + s + 11); ctx.fillText("P1 ↑", ox - 12, oy - 3);
+    project = (p) => [ox + p[0][0] * s, oy + (1 - p[1][0]) * s];
+    trace(ctx, pols.map(project), css("--accent"));
+  } else {
+    const A = [ox + s / 2, oy], Bv = [ox, oy + s * 0.87], C = [ox + s, oy + s * 0.87];
+    ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...Bv); ctx.lineTo(...C); ctx.closePath(); ctx.stroke();
+    ctx.fillText("a0", A[0] - 6, A[1] + 12); ctx.fillText("a1", Bv[0], Bv[1] + 11); ctx.fillText("a2", C[0] - 12, C[1] + 11);
+    const bary = (q) => [q[0] * A[0] + q[1] * Bv[0] + q[2] * C[0], q[0] * A[1] + q[1] * Bv[1] + q[2] * C[1]];
+    trace(ctx, pols.map(p => bary(p[0])), css("--p0"));
+    trace(ctx, pols.map(p => bary(p[1])), css("--p1"));
+  }
+}
+
+function trace(ctx, pts, color) {
+  ctx.strokeStyle = color; ctx.globalAlpha = 0.85; ctx.lineWidth = 1.5; ctx.beginPath();
+  pts.forEach((p, i) => i ? ctx.lineTo(...p) : ctx.moveTo(...p)); ctx.stroke(); ctx.globalAlpha = 1;
+  const last = pts[pts.length - 1];
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(last[0], last[1], 3.5, 0, 7); ctx.fill();
+}
+
+function draw() {
+  $("nometrics").style.display = records.length ? "none" : "";
+  policyChart();
+  const keys = [];
+  for (const r of records) for (const k in r) if (!SKIP.has(k) && typeof r[k] === "number" && !keys.includes(k)) keys.push(k);
+  const order = ["exploitability", "vs_random", "entropy"];
+  keys.sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99));
+  keys.forEach(lineChart);
+}
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function render(s) {
+  session = s;
+  let html = `<div class="muted">AI checkpoint: iter ${s.ckpt_iter}</div>`;
+  html += `<table class="info">${s.info.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>`;
+  if (s.grid) {
+    const g = s.grid, legal = new Set(s.actions.map(a => a.id));
+    html += `<div class="grid" style="grid-template-columns: repeat(${g.cols}, 1fr)">`;
+    g.cells.forEach((c, i) => {
+      const action = g.gravity ? i % g.cols : i;
+      const ok = !s.terminal && legal.has(action) && (g.gravity || c === "");
+      html += `<button class="${c}" data-action="${action}" ${ok ? "" : "disabled"}>${c}</button>`;
+    });
+    html += `</div>`;
+  } else if (!s.terminal) {
+    html += `<div class="actions">${s.actions.map(a => `<button class="primary" data-action="${a.id}">${esc(a.label)}</button>`).join("")}</div>`;
+  }
+  if (s.terminal) {
+    const cls = s.return > 0 ? "win" : s.return < 0 ? "lose" : "";
+    html += `<div class="result ${cls}">${esc(s.result)}</div>`;
+  }
+  html += `<div class="history">${s.history.map(esc).join("<br>") || "…"}</div>`;
+  $("play").innerHTML = html;
+  $("play").querySelectorAll("[data-action]").forEach(b => b.onclick = () => act(+b.dataset.action));
+  if (s.terminal && !s.counted) {
+    s.counted = true; tally.games++; tally.total += s.return;
+    s.return > 0 ? tally.w++ : s.return < 0 ? tally.l++ : tally.d++;
+  }
+  $("score").textContent = tally.games
+    ? `You: ${tally.w}W ${tally.d}D ${tally.l}L over ${tally.games} games · avg return ${(tally.total / tally.games).toFixed(2)}`
+    : "";
+}
+
+async function newGame() {
+  if (!run) return;
+  try {
+    render(await api("/api/new", { run, seat: +$("seat").value, greedy: $("greedy").checked }));
+  } catch (e) { $("play").innerHTML = `<span class="error">${esc(e.message)}</span>`; }
+}
+
+async function act(action) {
+  try { render(await api("/api/act", { session: session.session, action })); }
+  catch (e) { $("play").insertAdjacentHTML("beforeend", `<div class="error">${esc(e.message)}</div>`); }
+}
+
+$("run").onchange = (e) => selectRun(e.target.value);
+$("newgame").onclick = newGame;
+window.addEventListener("resize", draw);
+loadRuns();
+setInterval(poll, 2000);
+setInterval(loadRuns, 10000);
+</script>
+</body>
+</html>

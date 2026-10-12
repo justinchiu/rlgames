@@ -34,6 +34,7 @@ class KuhnPoker:
     name = "kuhn_poker"
     num_actions = N_ACTION
     obs_dim = N_CARD + MAX_MOVES * 2
+    max_game_length = 2 + MAX_MOVES
 
     def init(self) -> KuhnState:
         return KuhnState(

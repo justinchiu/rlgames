@@ -37,6 +37,7 @@ class LiarsDice:
         self.name = f"liars_dice_{num_dice}d{num_faces}"
         self.num_actions = max(num_faces, self.num_bids + 1)
         self.obs_dim = num_dice * num_faces + self.num_bids
+        self.max_game_length = 2 * num_dice + self.num_bids + 1
 
     def init(self) -> LiarsDiceState:
         a = self.num_actions

@@ -15,5 +15,11 @@ def uniform_over(mask: jax.Array) -> jax.Array:
 
 
 def select(pred: jax.Array, on_true, on_false):
-    """Elementwise `jnp.where` over two pytrees with the same structure."""
-    return jax.tree.map(lambda x, y: jnp.where(pred, x, y), on_true, on_false)
+    """`jnp.where` over two pytrees with the same structure. `pred` may be batched
+    over leading axes; it is broadcast over each leaf's trailing axes."""
+
+    def where(x, y):
+        p = jnp.reshape(pred, jnp.shape(pred) + (1,) * (jnp.ndim(x) - jnp.ndim(pred)))
+        return jnp.where(p, x, y)
+
+    return jax.tree.map(where, on_true, on_false)

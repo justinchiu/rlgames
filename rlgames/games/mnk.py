@@ -46,6 +46,7 @@ class MNKGame:
         self.num_cells = rows * cols
         self.num_actions = cols if gravity else self.num_cells
         self.obs_dim = 2 * self.num_cells
+        self.max_game_length = self.num_cells
         self.lines = jnp.asarray(winning_lines(rows, cols, k))
 
     def init(self) -> MNKState:

@@ -37,6 +37,7 @@ class Goofspiel:
         self.name = f"goofspiel_{num_cards}"
         self.num_actions = num_cards
         self.obs_dim = 3 * num_cards * num_cards
+        self.max_game_length = 3 * num_cards
 
     def init(self) -> GoofspielState:
         k = self.num_cards

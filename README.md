@@ -13,15 +13,46 @@ exploitability for every game small enough to enumerate. Runs on CPU (Mac), GPU 
 | `tic_tac_toe` | perfect | 549,946 | 4,520 |
 | `connect_four` | perfect | too large to enumerate | |
 
+## Workflow
+
+1. **Implement a learning algorithm** in `rlgames/core/learner.py`. `Learner.update` receives a
+   batch of self-play games played by the current network and returns new parameters. The
+   docstring there describes the batch fields and the JAX/optax plumbing. Algorithm
+   hyperparameters go in `LearnerConfig` and become command-line flags.
+
+2. **Train**:
+   ```
+   uv run python scripts/train/selfplay_main.py --game kuhn_poker --save_dir exps/kuhn
+   ```
+   Options include `--num_envs`, `--num_iters`, `--optim.name adamw|sgd|muon`,
+   `--optim.lr`, `--network.hidden`, `--game_kwargs '{num_cards: 5}'` and `--learner.<field>`.
+   Add `--dry_run true` to run everything except learning.
+
+3. **Watch and play**, in a second terminal:
+   ```
+   uv run python scripts/play/server.py --exps_dir exps
+   ```
+   Open http://localhost:8000. The left side plots the run's metrics as they are written:
+   exact exploitability on every game except Connect Four, return against a random
+   opponent, policy entropy, anything your learner returns, and for matrix games the policy
+   trajectory, which shows cycling directly. The right side plays you against the latest
+   checkpoint; each new game picks up the newest one.
+
 ## Layout
 
-- `rlgames/games/` — the games as pure functions over NamedTuple states (`jit`/`vmap`-able).
+- `rlgames/games/`: the games as pure functions over NamedTuple states (`jit`/`vmap`-able).
   `base.py` documents the interface.
-- `rlgames/core/tree.py` — breadth-first enumeration of a game tree into numpy arrays.
-- `rlgames/core/exploitability.py` — exact best responses, NashConv and exploitability.
-- `rlgames/core/cfr.py` — tabular CFR+, the reference equilibrium solver.
+- `rlgames/core/env.py`: batched self-play rollouts that return a flat `Batch` of decisions.
+- `rlgames/core/learner.py`: the learning algorithm (yours to write).
+- `rlgames/core/optim.py`: optimizer construction (AdamW, SGD, Muon).
+- `rlgames/core/evaluation.py`: exploitability of a network and return against an opponent.
+- `rlgames/core/tree.py`, `exploitability.py`: exact tree enumeration and best responses.
+- `rlgames/core/cfr.py`: tabular CFR+, a reference equilibrium solver.
+- `rlgames/networks/mlp.py`: the policy-value network.
+- `rlgames/play/`: views of each game and the web page for the play server.
+- `scripts/train/selfplay_main.py`, `scripts/play/server.py`: entry points.
 
-## Usage
+## Exact evaluation
 
 ```python
 from rlgames.games import make
@@ -35,8 +66,10 @@ policy = CFRPlus(tree, CFRConfig(num_iters=1000)).solve()
 print(exploitability(tree, policy))  # ~2e-4
 ```
 
-A policy is a `float[num_infosets, num_actions]` array; for a neural policy, evaluate it on
-`tree.infoset_obs` (masked by `tree.infoset_legal`).
+A tabular policy is a `float[num_infosets, num_actions]` array.
+`rlgames.core.evaluation.tabulate_policy` builds one from network parameters.
+
+## Tests
 
 ```
 uv run pytest

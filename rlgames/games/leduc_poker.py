@@ -57,6 +57,7 @@ class LeducPoker:
     name = "leduc_poker"
     num_actions = N_ACTION
     obs_dim = 2 * N_RANK + 2 * MAX_ROUND_MOVES * N_PLAYER_ACTION
+    max_game_length = 3 + 2 * MAX_ROUND_MOVES
 
     def init(self) -> LeducState:
         return LeducState(

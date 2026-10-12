@@ -27,6 +27,8 @@ class Game(Protocol):
     name: str
     num_actions: int
     obs_dim: int
+    # Upper bound on the number of steps (chance and player) in one game.
+    max_game_length: int
 
     def init(self) -> State:
         """The root state, usually a chance node."""

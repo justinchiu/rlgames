@@ -35,6 +35,16 @@ class GameTest(unittest.TestCase):
                 state = random_playout(game, jax.random.key(seed))
                 self.assertAlmostEqual(float(state.returns.sum()), 0.0, msg=name)
 
+    def test_max_game_length(self):
+        from rlgames.core.tree import enumerate_tree
+
+        for name in GAMES:
+            if name == "connect_four":
+                continue
+            game = make(name)
+            tree = enumerate_tree(game)
+            self.assertLessEqual(tree.max_depth - 1, game.max_game_length, msg=name)
+
     def test_vmap_step(self):
         for name in GAMES:
             game = make(name)

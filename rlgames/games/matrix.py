@@ -20,10 +20,12 @@ class MatrixState(NamedTuple):
     terminal: jax.Array
     returns: jax.Array
     action0: jax.Array
+    action1: jax.Array
 
 
 class MatrixGame:
     obs_dim = 1
+    max_game_length = 2
 
     def __init__(self, payoffs, name: str = "matrix"):
         """`payoffs[i, j]` is player 0's payoff when the players pick i and j."""
@@ -43,6 +45,7 @@ class MatrixGame:
             terminal=jnp.bool_(False),
             returns=jnp.zeros(2, jnp.float32),
             action0=jnp.int32(-1),
+            action1=jnp.int32(-1),
         )
 
     def step(self, state: MatrixState, action: jax.Array) -> MatrixState:
@@ -54,6 +57,7 @@ class MatrixGame:
             terminal=~first,
             returns=jnp.where(first, state.returns, jnp.stack([payoff, -payoff])),
             action0=jnp.where(first, action, state.action0).astype(jnp.int32),
+            action1=jnp.where(first, state.action1, action).astype(jnp.int32),
         )
 
     def observe(self, state: MatrixState, player) -> jax.Array:
