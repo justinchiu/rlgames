@@ -34,7 +34,12 @@ from rlgames.core.tree import GameTree
 
 def regret_matching(regrets: np.ndarray, legal: np.ndarray) -> np.ndarray:
     """float[I, A] regrets and bool[I, A] legal actions -> float[I, A] policy."""
-    raise NotImplementedError("Implement regret_matching in rlgames/core/cfr.py")
+    posR = np.maximum(regrets, 0) * legal
+    Z = posR.sum(1, keepdims=True)
+    Zsafe = Z + (Z == 0) * 1e-5
+    # if Z is zero, fallback to uniform instead of exp
+    uniform = legal.astype(float) / legal.sum(1, keepdims=True)
+    return np.where(Z > 0, posR / Zsafe, uniform)
 
 
 @dataclass
