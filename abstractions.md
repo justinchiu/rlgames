@@ -41,13 +41,23 @@ h                    history / full game-tree node
 I                    information set containing histories indistinguishable to a player
 i                    player whose payoff is being evaluated
 a                    action
-sigma(t, i, I, a)     action probability
+sigma(t, i, I, a)    action probability at one decision (the policy)
+reach(t, h)          probability of reaching h: product of all chance and action
+                     probabilities on the path; reach = reach_self * reach_opp
+reach_self(t, i, h)  player i's own factors of reach(t, h)
+reach_opp(t, i, h)   the opponent's and chance's factors of reach(t, h)
 reward(i, z)         actual terminal payoff at terminal history z
 q(t, i, h, a)        expected payoff after a at h, then current-policy continuation
 value(t, i, h)       expected payoff under the current policy at h
-r(t, i, I, a)        instantaneous counterfactual regret
+cfv(t, i, I, a)      counterfactual action value: sum over h in I of
+                     reach_opp(t, i, h) * q(t, i, h, a); not normalized
+cfv(t, i, I)         counterfactual value: same weighting applied to value(t, i, h)
+r(t, i, I, a)        instantaneous counterfactual regret: cfv(t, i, I, a) - cfv(t, i, I)
 R(T, i, I, a)        accumulated counterfactual regret
 ```
+
+CFR papers write reach as `pi`, `pi_i`, and `pi_-i`. We avoid `pi` because RL
+and PPO use it for the policy. Here the policy is always `sigma`.
 
 History-conditioned values and information-conditioned values are different
 quantities. An information-conditioned value requires an explicit distribution
