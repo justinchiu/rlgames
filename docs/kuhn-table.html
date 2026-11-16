@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuhn Poker Table</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column of steps (rules, play, CFR refresher, exercise); the play step widens into table + tree. */
+:root {
+  --bg: #eef1ef;
+  --panel: #ffffff;
+  --ink: #18201c;
+  --muted: #5b6862;
+  --line: #cfd8d3;
+  --felt: #1f5c47;
+  --felt-ink: #e9f3ee;
+  --card: #fbfbf8;
+  --card-ink: #1b1b1b;
+  --accent: #c2410c;
+  --you: #1d4ed8;
+  --opp: #7c3aed;
+  --good: #15803d;
+  --bad: #b91c1c;
+  --codebg: #f3f6f4;
+  --font-display: "Young Serif", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111614; --panel: #1a211e; --ink: #e6ece9; --muted: #9aa8a1; --line: #2e3a35;
+    --felt: #1b4a3a; --felt-ink: #e2efe8; --card: #f3f1ea; --card-ink: #1b1b1b;
+    --accent: #fb923c; --you: #7aa2ff; --opp: #b794ff; --good: #4ade80; --bad: #f87171; --codebg: #141a17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111614; --panel: #1a211e; --ink: #e6ece9; --muted: #9aa8a1; --line: #2e3a35;
+  --felt: #1b4a3a; --felt-ink: #e2efe8; --card: #f3f1ea; --card-ink: #1b1b1b;
+  --accent: #fb923c; --you: #7aa2ff; --opp: #b794ff; --good: #4ade80; --bad: #f87171; --codebg: #141a17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 22px; }
+header h1 { font-family: var(--font-display); font-weight: 400; font-size: 32px; margin: 0; text-wrap: balance; }
+header p { margin: 6px 0 0; color: var(--muted); max-width: 72ch; }
+nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+nav a { color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; background: var(--panel); }
+nav a:hover { border-color: var(--muted); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; min-width: 0; }
+.panel > h2 { font-family: var(--font-display); font-weight: 400; font-size: 22px; margin: 0 0 4px; text-wrap: balance; }
+.panel > .lede { color: var(--muted); margin: 0 0 16px; max-width: 72ch; }
+h3 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+.prose { max-width: 72ch; }
+.prose p { margin: 0 0 10px; }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+@media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+ol, ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.note { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+code, .mono { font-family: var(--font-mono); font-size: 13px; }
+pre { background: var(--codebg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; margin: 0 0 12px; }
+
+/* table */
+.table { background: var(--felt); color: var(--felt-ink); border-radius: 14px; padding: 18px; display: grid; gap: 14px; }
+.seat { display: flex; align-items: center; gap: 14px; }
+.seat .who { display: grid; gap: 2px; }
+.seat .who b { font-weight: 600; }
+.seat .who span { font-size: 13px; opacity: .85; }
+.pc { width: 64px; height: 90px; border-radius: 8px; background: var(--card); color: var(--card-ink);
+  display: grid; place-items: center; font-family: var(--font-display); font-size: 34px;
+  box-shadow: 0 2px 0 rgba(0,0,0,.25); flex: none; }
+.pc.back { background: repeating-linear-gradient(45deg, #2c7a5f 0 6px, #24694f 6px 12px); color: transparent; border: 3px solid var(--card); }
+.pc.empty { background: transparent; border: 2px dashed rgba(255,255,255,.3); box-shadow: none; color: transparent; }
+.pot { display: flex; justify-content: space-between; align-items: center; border-block: 1px solid rgba(255,255,255,.15); padding-block: 10px; font-size: 14px; gap: 10px; flex-wrap: wrap; }
+.pot .chips, .hist { font-family: var(--font-mono); font-size: 13px; }
+.msg { min-height: 48px; font-size: 14px; }
+.msg strong.good { color: #86efac; } .msg strong.bad { color: #fca5a5; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+button { font: inherit; font-weight: 600; border-radius: 8px; border: 1px solid transparent; padding: 9px 16px; cursor: pointer; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.act { background: var(--card); color: var(--card-ink); }
+.act:hover { filter: brightness(.94); }
+.act[disabled] { opacity: .35; cursor: default; }
+.ctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.ghost:hover { border-color: var(--muted); }
+.primary { background: var(--accent); color: #fff; }
+.checkbox { display: flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.tally { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* tree */
+.treebox { overflow-x: auto; }
+svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.edge { stroke: var(--line); stroke-width: 2; fill: none; }
+.edge.on { stroke: var(--accent); stroke-width: 3.5; }
+.elab { font: 11px var(--font-mono); fill: var(--muted); }
+.elab.on { fill: var(--accent); font-weight: 500; }
+.node { stroke: var(--panel); stroke-width: 2; }
+.n-chance { fill: var(--muted); }
+.n-p0 { fill: var(--you); }
+.n-p1 { fill: var(--opp); }
+.n-term { fill: var(--panel); stroke: var(--muted); stroke-width: 1.5; }
+.node.on { stroke: var(--accent); stroke-width: 3.5; }
+.pay { font: 600 12px var(--font-mono); text-anchor: middle; }
+.pay.pos { fill: var(--good); } .pay.neg { fill: var(--bad); }
+.sub { font: 13px var(--font-body); fill: var(--ink); text-anchor: middle; font-weight: 600; }
+.hname { font: 600 11px var(--font-mono); fill: var(--accent); }
+.iset { stroke: var(--you); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; opacity: .7; }
+.iset.focus { stroke: var(--accent); stroke-width: 2.5; opacity: 1; }
+.isetlab { font: 11px var(--font-body); fill: var(--muted); text-anchor: middle; }
+.isetlab.focus { fill: var(--accent); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 5px; }
+
+/* data tables */
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablebox { overflow-x: auto; }
+
+/* exercise */
+.q { border-top: 1px solid var(--line); padding-block: 16px; display: grid; gap: 10px; }
+.q:first-of-type { border-top: 0; }
+.q .ask { max-width: 72ch; }
+.q .ask b { font-weight: 600; }
+.fields { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+.field { display: grid; gap: 3px; }
+.field label { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.field input { font: 14px var(--font-mono); width: 130px; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+.field input.ok { border-color: var(--good); }
+.field input.no { border-color: var(--bad); }
+.verdict { font-size: 13px; min-height: 20px; }
+.verdict.ok { color: var(--good); } .verdict.no { color: var(--bad); }
+details { font-size: 14px; color: var(--muted); }
+details summary { cursor: pointer; width: fit-content; }
+details p { margin: 6px 0 0; max-width: 72ch; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 1px 7px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); margin-right: 6px; vertical-align: 1px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Kuhn Poker Table</h1>
+    <p>A from-scratch walkthrough: learn the smallest real poker game, play it, review the CFR quantities, then compute one CFR+ update by hand at a single decision.</p>
+    <nav>
+      <a href="#rules">1 · Rules</a>
+      <a href="#play">2 · Play</a>
+      <a href="#cfr">3 · CFR in this notation</a>
+      <a href="#exercise">4 · Exercise</a>
+    </nav>
+  </header>
+
+  <!-- 1. RULES -->
+  <section class="panel" id="rules">
+    <h2>1 · Kuhn poker in one minute</h2>
+    <p class="lede">Poker with three cards and one round of betting. Small enough to draw the whole game, but it still has hidden cards and bluffing, which is what CFR is built for.</p>
+    <div class="cols">
+      <div>
+        <h3>How a hand goes</h3>
+        <ol>
+          <li>Both players put 1 chip in the pot. This is the <b>ante</b>.</li>
+          <li>The deck is J, Q, K (J lowest). Each player gets one card face down. The third card is unused. You see only your own card.</li>
+          <li>You (player 0) act first: <b>check</b> (put nothing in) or <b>bet</b> 1 chip.</li>
+          <li>If you checked, player 1 checks (go to showdown) or bets 1. If player 1 bets, you <b>call</b> (put in 1, go to showdown) or <b>fold</b> (give up the pot).</li>
+          <li>If you bet, player 1 calls (showdown) or folds.</li>
+          <li><b>Showdown:</b> the higher card takes the pot.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>Every way a hand ends, and what you win</h3>
+        <div class="tablebox"><table>
+          <thead><tr><th>Betting</th><th>Ends in</th><th>Your payoff</th></tr></thead>
+          <tbody>
+            <tr><td>check, check</td><td>showdown</td><td class="num">±1</td></tr>
+            <tr><td>check, bet, fold</td><td>you fold</td><td class="num">−1</td></tr>
+            <tr><td>check, bet, call</td><td>showdown</td><td class="num">±2</td></tr>
+            <tr><td>bet, fold</td><td>player 1 folds</td><td class="num">+1</td></tr>
+            <tr><td>bet, call</td><td>showdown</td><td class="num">±2</td></tr>
+          </tbody>
+        </table></div>
+        <p class="note">Payoff is chips won minus chips put in. ± is + if your card is higher, − if lower. Folding loses only your ante; calling a bet risks 2.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. PLAY -->
+  <section class="panel" id="play">
+    <h2>2 · Play against a fixed bot</h2>
+    <p class="lede">The bot (player 1) uses the strategy in the table below, which is also the one the exercise uses. Try "Deal me the Q", check, and see what happens when the bot bets.</p>
+    <div class="main">
+      <div>
+        <div class="table" aria-live="polite">
+          <div class="seat">
+            <div class="pc back" id="oppCard">?</div>
+            <div class="who"><b>Player 1 (bot)</b><span id="oppNote">Card hidden</span></div>
+          </div>
+          <div class="pot">
+            <span>Pot <span class="chips" id="pot">0</span></span>
+            <span class="hist" id="hist">no actions yet</span>
+          </div>
+          <div class="seat">
+            <div class="pc empty" id="youCard">?</div>
+            <div class="who"><b>You, player 0</b><span id="youNote">Press Deal to start</span></div>
+          </div>
+          <div class="msg" id="msg">Press Deal. Each player antes 1 chip and gets one card.</div>
+          <div class="actions">
+            <button class="act" id="aCheck" disabled>Check</button>
+            <button class="act" id="aBet" disabled>Bet 1</button>
+            <button class="act" id="aFold" disabled>Fold</button>
+            <button class="act" id="aCall" disabled>Call 1</button>
+          </div>
+        </div>
+        <div style="display:grid; gap:10px; margin-top:14px">
+          <div class="ctl">
+            <button class="primary" id="deal">Deal</button>
+            <button class="ghost" id="dealQ">Deal me the Q</button>
+            <label class="checkbox"><input type="checkbox" id="peek"> Show bot's card</label>
+          </div>
+          <div class="tally" id="tally">Hands 0 · Net 0 chips</div>
+        </div>
+        <h3 style="margin-top:18px">The bot's strategy</h3>
+        <div class="tablebox"><table>
+          <thead><tr><th>Bot holds</th><th>After you check: bets</th><th>After you bet: calls</th></tr></thead>
+          <tbody>
+            <tr><td>J</td><td class="num">1/3 of the time</td><td class="num">never</td></tr>
+            <tr><td>Q</td><td class="num">never</td><td class="num">1/2 of the time</td></tr>
+            <tr><td>K</td><td class="num">always</td><td class="num">always</td></tr>
+          </tbody>
+        </table></div>
+        <p class="note">With J, a bet is a bluff: J loses every showdown, so the bet only wins if you fold.</p>
+      </div>
+      <div>
+        <h3 id="treeTitle">Game tree when you hold Q</h3>
+        <div class="treebox"><svg id="tree" viewBox="0 0 720 430" role="img" aria-label="Game tree"></svg></div>
+        <div class="legend">
+          <span><i style="background:var(--muted)"></i>chance (the deal)</span>
+          <span><i style="background:var(--you)"></i>you act</span>
+          <span><i style="background:var(--opp)"></i>bot acts</span>
+          <span><i style="border:1.5px dashed var(--you); border-radius:3px"></i>dashed box: positions you can't tell apart</span>
+        </div>
+        <p class="note">Each path from the top to a square is one complete hand, a <b>history</b>. The tree splits on the bot's card because that is hidden from you. Edge labels are action probabilities; with Q, your edges show the exercise's σ. Numbers under squares are your payoff. While the bot's card is hidden, your path lights up in both halves, since both are possible as far as you know.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. CFR -->
+  <section class="panel" id="cfr">
+    <h2>3 · CFR in this notation</h2>
+    <p class="lede">CFR runs a separate regret-matching learner at every decision point a player can recognize. Below are the quantities it uses, with the names this repo uses. Payoffs are always from player i's point of view.</p>
+    <div class="cols">
+      <div class="prose">
+        <h3>Histories and information sets</h3>
+        <p>A <b>history</b> <code>h</code> is everything that has happened, including hidden cards: one node of the tree. An <b>information set</b> <code>I</code> is a group of histories that look identical to the player acting. In the tree, it's a dashed box.</p>
+        <h3>Policy vs reach</h3>
+        <p><code>sigma(t, i, I, a)</code> is the probability player i picks action a at information set I, under the policy at iteration t. It covers <i>one decision</i> and is what CFR learns.</p>
+        <p><code>reach(t, h)</code> is the probability the game gets to history h at all: multiply every probability along the path, including chance's deal. Split those factors by who chose them:</p>
+        <pre>reach(t, h) = reach_self(t, i, h) * reach_opp(t, i, h)
+reach_self   player i's own action probabilities on the path
+reach_opp    the opponent's AND chance's probabilities</pre>
+        <h3>Values</h3>
+        <pre>q(t, i, h, a)  expected payoff to i after taking a at h,
+               then everyone plays the current policy</pre>
+      </div>
+      <div class="prose">
+        <h3>Counterfactual values and regret</h3>
+        <pre>cfv(t, i, I, a) = sum over h in I of reach_opp(t, i, h) * q(t, i, h, a)
+cfv(t, i, I)    = sum over a of sigma(t, i, I, a) * cfv(t, i, I, a)
+r(t, i, I, a)   = cfv(t, i, I, a) - cfv(t, i, I)</pre>
+        <p>Weight each hidden possibility by how likely chance and the opponent made it, leave out your own reach ("suppose I played to get here"), and don't normalize.</p>
+        <h3>CFR+ update</h3>
+        <pre>R(t, i, I, a)       = max(R(t-1, i, I, a) + r(t, i, I, a), 0)
+sigma(t+1, i, I, ·) = regret_matching(R(t, i, I, ·))</pre>
+        <p>Regret matching: play each action in proportion to its positive regret; if all are zero, play uniformly.</p>
+        <h3>Average policy (the one that converges)</h3>
+        <pre>avg(i, I, a) ∝ sum over t of  w_t * reach_self(t, i, I) * sigma(t, i, I, a)
+w_t = t ** avg_power</pre>
+        <p>The proportionality constant is the matching sum without the σ factor. Regrets use <code>reach_opp</code>; the average uses <code>reach_self</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. EXERCISE -->
+  <section class="panel" id="exercise">
+    <h2>4 · Exercise: one CFR+ update by hand</h2>
+    <p class="lede">You are player 0 (i = 0) at iteration t = 2 of CFR+. Compute the update at a single information set, using the bot's strategy above as player 1's current policy.</p>
+
+    <div class="cols">
+      <div class="prose">
+        <h3>The information set</h3>
+        <p><b>I = "I hold Q, I checked, player 1 bet."</b> Your actions are <b>call</b> or <b>fold</b>. It contains two histories, both inside the orange box in the tree when you hold Q:</p>
+        <ul>
+          <li><b>h_J</b>: deal (you Q, bot J), you check, bot bets</li>
+          <li><b>h_K</b>: deal (you Q, bot K), you check, bot bets</li>
+        </ul>
+        <p class="note">After you call or fold, the hand ends, so <code>q(t, 0, h, a)</code> is just the payoff from the table in section 1.</p>
+      </div>
+      <div>
+        <h3>Given numbers</h3>
+        <div class="tablebox"><table>
+          <tbody>
+            <tr><td>Probability of each specific deal, e.g. (you Q, bot J)</td><td class="num">1/6</td></tr>
+            <tr><td>You check when holding Q</td><td class="num">0.8</td></tr>
+            <tr><td>Bot bets after your check, holding J</td><td class="num">1/3</td></tr>
+            <tr><td>Bot bets after your check, holding K</td><td class="num">1</td></tr>
+            <tr><td>Your current σ at I</td><td class="num">call 1/2, fold 1/2</td></tr>
+            <tr><td>Your accumulated regret R(t−1) at I</td><td class="num">call 0, fold 0.1</td></tr>
+            <tr><td>Iteration t, avg_power</td><td class="num">2, 1</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px">
+      <div class="q" data-q="1">
+        <div class="ask"><span class="tag">Q1</span>Compute <code>reach_opp(t, 0, h)</code> for both histories. Which factors on each path belong to chance and the bot, and which to you?</div>
+        <div class="fields">
+          <div class="field"><label for="q1a">reach_opp(h_J)</label><input id="q1a" data-ans="1/18" placeholder="e.g. 1/9"></div>
+          <div class="field"><label for="q1b">reach_opp(h_K)</label><input id="q1b" data-ans="1/6" placeholder="e.g. 0.25"></div>
+          <button class="ghost chk">Check</button>
+        </div>
+        <div class="verdict"></div>
+        <details><summary>Hint</summary><p>Walk the path to each history and list every probability on it. Your own check (0.8) is on the path too. Does it belong in reach_opp?</p></details>
+      </div>
+
+      <div class="q" data-q="2">
+        <div class="ask"><span class="tag">Q2</span>Compute <code>cfv(t, 0, I, call)</code>, <code>cfv(t, 0, I, fold)</code>, and <code>cfv(t, 0, I)</code>.</div>
+        <div class="fields">
+          <div class="field"><label for="q2a">cfv(I, call)</label><input id="q2a" data-ans="-2/9"></div>
+          <div class="field"><label for="q2b">cfv(I, fold)</label><input id="q2b" data-ans="-2/9"></div>
+          <div class="field"><label for="q2c">cfv(I)</label><input id="q2c" data-ans="-2/9"></div>
+          <button class="ghost chk">Check</button>
+        </div>
+        <div class="verdict"></div>
+        <details><summary>Hint</summary><p>For each action, the sum has one term per history in I: that history's reach_opp times your payoff if the hand ended with that action. Don't divide by the total weight.</p></details>
+      </div>
+
+      <div class="q" data-q="3">
+        <div class="ask"><span class="tag">Q3</span>Compute the instantaneous regrets <code>r(t, 0, I, call)</code> and <code>r(t, 0, I, fold)</code>. What do they tell you about this spot?</div>
+        <div class="fields">
+          <div class="field"><label for="q3a">r(I, call)</label><input id="q3a" data-ans="0"></div>
+          <div class="field"><label for="q3b">r(I, fold)</label><input id="q3b" data-ans="0"></div>
+          <button class="ghost chk">Check</button>
+        </div>
+        <div class="verdict"></div>
+      </div>
+
+      <div class="q" data-q="4">
+        <div class="ask"><span class="tag">Q4</span>Apply the CFR+ update to get <code>R(t, 0, I, ·)</code>, then regret matching to get next iteration's policy <code>sigma(t+1, 0, I, ·)</code>.</div>
+        <div class="fields">
+          <div class="field"><label for="q4a">R(I, call)</label><input id="q4a" data-ans="0"></div>
+          <div class="field"><label for="q4b">R(I, fold)</label><input id="q4b" data-ans="0.1"></div>
+          <div class="field"><label for="q4c">σ(t+1, call)</label><input id="q4c" data-ans="0"></div>
+          <div class="field"><label for="q4d">σ(t+1, fold)</label><input id="q4d" data-ans="1"></div>
+          <button class="ghost chk">Check</button>
+        </div>
+        <div class="verdict"></div>
+      </div>
+
+      <div class="q" data-q="5">
+        <div class="ask"><span class="tag">Q5</span>This iteration's contribution to the average policy at I: the numerator term <code>w_t * reach_self * sigma</code> for each action, and the denominator term <code>w_t * reach_self</code>.</div>
+        <div class="fields">
+          <div class="field"><label for="q5a">numerator, call</label><input id="q5a" data-ans="0.8"></div>
+          <div class="field"><label for="q5b">numerator, fold</label><input id="q5b" data-ans="0.8"></div>
+          <div class="field"><label for="q5c">denominator</label><input id="q5c" data-ans="1.6"></div>
+          <button class="ghost chk">Check</button>
+        </div>
+        <div class="verdict"></div>
+        <details><summary>Hint</summary><p>reach_self is the product of only your own action probabilities on the path to I. In both histories, what did you do before reaching I?</p></details>
+      </div>
+
+      <div class="q" data-q="6">
+        <div class="ask"><span class="tag">Q6</span>Suppose you checked with Q only 10% of the time instead of 80%. Which of your answers to Q1–Q5 change, and why? Explain in words, then send your reasoning to Claude along with your working for the rest.</div>
+      </div>
+    </div>
+    <p class="note">Check buttons accept fractions (<code>-2/9</code>) or decimals to 3 places. They only say right or wrong. Send your working to Claude, since the reasoning matters more than the number.</p>
+  </section>
+</div>
+
+<script>
+const NAMES = ["J", "Q", "K"];
+const P1_BET = [1/3, 0, 1];      // after P0 checks, by P1 card
+const P1_CALL = [0, 1/2, 1];     // after P0 bets, by P1 card
+const P0_Q = { check: 0.8, bet: 0.2, call: 0.5, fold: 0.5 }; // exercise sigma, Q only
+const frac = p => ({ 0: "0", 1: "1", 0.5: "1/2", 0.2: "0.2", 0.8: "0.8" }[p] ?? (Math.abs(p - 1/3) < 1e-9 ? "1/3" : Math.abs(p - 2/3) < 1e-9 ? "2/3" : p.toFixed(2)));
+
+let s = { you: null, opp: null, hist: [], pot: 0, phase: "idle", hands: 0, net: 0 };
+const $ = id => document.getElementById(id);
+
+function payoff(hist, you, opp) {
+  const show = you > opp ? 1 : -1;
+  const h = hist.join(",");
+  if (h === "check,check") return show;
+  if (h === "check,bet,fold") return -1;
+  if (h === "check,bet,call") return 2 * show;
+  if (h === "bet,fold") return 1;
+  if (h === "bet,call") return 2 * show;
+  return null;
+}
+
+function deal(forceQ) {
+  const you = forceQ ? 1 : Math.floor(Math.random() * 3);
+  const rest = [0, 1, 2].filter(c => c !== you);
+  const opp = rest[Math.floor(Math.random() * 2)];
+  s = { ...s, you, opp, hist: [], pot: 2, phase: "p0first" };
+  setMsg("Your move. Check, or bet 1 chip.");
+  render();
+}
+
+function act(a) {
+  s.hist.push(a);
+  if (a === "bet" || a === "call") s.pot += 1;
+  if (s.phase === "p0first") {
+    s.phase = "p1";
+    setMsg("The bot is deciding…");
+    render();
+    setTimeout(botMove, 450);
+  } else if (s.phase === "p0facing") finish();
+}
+
+function botMove() {
+  const last = s.hist[s.hist.length - 1];
+  const a = last === "check"
+    ? (Math.random() < P1_BET[s.opp] ? "bet" : "check")
+    : (Math.random() < P1_CALL[s.opp] ? "call" : "fold");
+  s.hist.push(a);
+  if (a === "bet" || a === "call") s.pot += 1;
+  if (a === "bet") {
+    s.phase = "p0facing";
+    setMsg("The bot bets. Call 1 to go to showdown, or fold and lose your ante.");
+    render();
+  } else finish();
+}
+
+function finish() {
+  const pay = payoff(s.hist, s.you, s.opp);
+  s.phase = "done"; s.hands += 1; s.net += pay;
+  const last = s.hist[s.hist.length - 1];
+  const why = last !== "fold" ? `Showdown: your ${NAMES[s.you]} vs the bot's ${NAMES[s.opp]}.` : (s.hist.length === 3 ? "You folded." : "The bot folded.");
+  setMsg(`${why} You <strong class="${pay > 0 ? "good" : "bad"}">${pay > 0 ? "win" : "lose"} ${Math.abs(pay)}</strong>.`);
+  render();
+}
+
+function setMsg(html) { $("msg").innerHTML = html; }
+
+function render() {
+  const reveal = s.phase === "done" || $("peek").checked;
+  const yc = $("youCard"), oc = $("oppCard");
+  if (s.you === null) { yc.className = "pc empty"; oc.className = "pc back"; }
+  else {
+    yc.className = "pc"; yc.textContent = NAMES[s.you];
+    oc.className = reveal ? "pc" : "pc back"; oc.textContent = reveal ? NAMES[s.opp] : "?";
+  }
+  $("oppNote").textContent = s.you === null ? "Card hidden" : reveal ? `Holds ${NAMES[s.opp]}` : `Holds ${NAMES.filter((_, i) => i !== s.you).join(" or ")}; you can't tell which`;
+  $("youNote").textContent = s.you === null ? "Press Deal to start" : `You hold ${NAMES[s.you]}`;
+  $("pot").textContent = s.pot;
+  $("hist").textContent = s.hist.length ? s.hist.join(" · ") : "no actions yet";
+  $("aCheck").disabled = $("aBet").disabled = s.phase !== "p0first";
+  $("aFold").disabled = $("aCall").disabled = s.phase !== "p0facing";
+  $("tally").textContent = `Hands ${s.hands} · Net ${s.net > 0 ? "+" : ""}${s.net} chips`;
+  drawTree();
+}
+
+/* ---------- tree ---------- */
+const SVGNS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function drawTree() {
+  const svg = $("tree");
+  svg.replaceChildren();
+  const you = s.you === null ? 1 : s.you;
+  $("treeTitle").textContent = `Game tree when you hold ${NAMES[you]}`;
+  const opps = [0, 1, 2].filter(c => c !== you);
+  const reveal = s.phase === "done" || $("peek").checked;
+  const isQ = you === 1;
+  const p0 = k => isQ ? `${k} ${frac(P0_Q[k])}` : k;
+
+  const pos = {};
+  const root = [360, 22];
+  const layout = { A: [0, 85], B: [-95, 165], C: [95, 165], T1: [-150, 255], D: [-45, 300], T2: [-95, 385], T3: [5, 385], T4: [60, 255], T5: [135, 255] };
+  opps.forEach((o, k) => {
+    const cx = k === 0 ? 180 : 540;
+    for (const n in layout) pos[`${o}:${n}`] = [cx + layout[n][0], layout[n][1]];
+  });
+
+  const pathNodes = h => {
+    const map = { "check": "B", "bet": "C", "check,check": "T1", "check,bet": "D", "check,bet,fold": "T2", "check,bet,call": "T3", "bet,fold": "T4", "bet,call": "T5" };
+    const seq = ["A"];
+    for (let i = 1; i <= h.length; i++) seq.push(map[h.slice(0, i).join(",")]);
+    return seq;
+  };
+  const active = new Set();
+  if (s.you !== null && s.phase !== "idle") {
+    (reveal ? [s.opp] : opps).forEach(o => {
+      pathNodes(s.hist).forEach(n => active.add(`${o}:${n}`));
+      active.add(`root>${o}`);
+    });
+  }
+
+  const edges = [];
+  opps.forEach(o => {
+    const P = n => pos[`${o}:${n}`];
+    edges.push([root, P("A"), "deal 1/6", `root>${o}`, `${o}:A`]);
+    edges.push([P("A"), P("B"), p0("check"), `${o}:A`, `${o}:B`]);
+    edges.push([P("A"), P("C"), p0("bet"), `${o}:A`, `${o}:C`]);
+    edges.push([P("B"), P("T1"), `check ${frac(1 - P1_BET[o])}`, `${o}:B`, `${o}:T1`]);
+    edges.push([P("B"), P("D"), `bet ${frac(P1_BET[o])}`, `${o}:B`, `${o}:D`]);
+    edges.push([P("D"), P("T2"), p0("fold"), `${o}:D`, `${o}:T2`]);
+    edges.push([P("D"), P("T3"), p0("call"), `${o}:D`, `${o}:T3`]);
+    edges.push([P("C"), P("T4"), `fold ${frac(1 - P1_CALL[o])}`, `${o}:C`, `${o}:T4`]);
+    edges.push([P("C"), P("T5"), `call ${frac(P1_CALL[o])}`, `${o}:C`, `${o}:T5`]);
+  });
+
+  const [a0, a1] = opps.map(o => pos[`${o}:A`]);
+  const [d0, d1] = opps.map(o => pos[`${o}:D`]);
+  svg.append(el("rect", { x: a0[0] - 22, y: a0[1] - 16, width: a1[0] - a0[0] + 44, height: 32, rx: 16, class: "iset" }));
+  svg.append(el("text", { x: 360, y: a0[1] + 4, class: "isetlab" }, `"I hold ${NAMES[you]}, first to act"`));
+  svg.append(el("rect", { x: d0[0] - 22, y: d0[1] - 16, width: d1[0] - d0[0] + 44, height: 32, rx: 16, class: "iset" + (isQ ? " focus" : "") }));
+  svg.append(el("text", { x: 360, y: d0[1] + 4, class: "isetlab" + (isQ ? " focus" : "") }, isQ ? `I = "I hold Q, I checked, bot bet"` : `"I hold ${NAMES[you]}, I checked, bot bet"`));
+
+  edges.forEach(([p, q, lab, from, to]) => {
+    const on = active.has(from) && active.has(to);
+    svg.append(el("line", { x1: p[0], y1: p[1], x2: q[0], y2: q[1], class: "edge" + (on ? " on" : "") }));
+    const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+    const left = q[0] < p[0];
+    svg.append(el("text", { x: mx + (left ? -6 : 6), y: my - 2, class: "elab" + (on ? " on" : ""), "text-anchor": left ? "end" : "start" }, lab));
+  });
+
+  svg.append(el("circle", { cx: root[0], cy: root[1], r: 8, class: "node n-chance" }));
+  svg.append(el("text", { x: root[0] + 14, y: root[1] + 4, class: "elab" }, `you are dealt ${NAMES[you]}`));
+
+  opps.forEach(o => {
+    const P = n => pos[`${o}:${n}`];
+    svg.append(el("text", { x: P("A")[0], y: P("A")[1] - 24, class: "sub" }, `bot holds ${NAMES[o]}`));
+    const types = { A: "n-p0", B: "n-p1", C: "n-p1", D: "n-p0" };
+    for (const n of ["A", "B", "C", "D"]) {
+      svg.append(el("circle", { cx: P(n)[0], cy: P(n)[1], r: 9, class: `node ${types[n]}` + (active.has(`${o}:${n}`) ? " on" : "") }));
+    }
+    if (isQ) svg.append(el("text", { x: P("D")[0] - 30, y: P("D")[1] + 4, class: "hname", "text-anchor": "end" }, `h_${NAMES[o]}`));
+    const terms = { T1: ["check", "check"], T2: ["check", "bet", "fold"], T3: ["check", "bet", "call"], T4: ["bet", "fold"], T5: ["bet", "call"] };
+    for (const n in terms) {
+      const v = payoff(terms[n], you, o);
+      svg.append(el("rect", { x: P(n)[0] - 7, y: P(n)[1] - 7, width: 14, height: 14, rx: 2, class: "node n-term" + (active.has(`${o}:${n}`) ? " on" : "") }));
+      svg.append(el("text", { x: P(n)[0], y: P(n)[1] + 24, class: "pay " + (v > 0 ? "pos" : "neg") }, (v > 0 ? "+" : "−") + Math.abs(v)));
+    }
+  });
+}
+
+/* ---------- answer checking ---------- */
+function parseNum(str) {
+  const t = String(str).trim().replace("−", "-");
+  if (!t) return NaN;
+  if (t.includes("/")) { const [a, b] = t.split("/").map(Number); return a / b; }
+  return Number(t);
+}
+document.querySelectorAll(".q").forEach(q => {
+  const btn = q.querySelector(".chk");
+  if (!btn) return;
+  btn.onclick = () => {
+    const inputs = [...q.querySelectorAll("input")];
+    let right = 0;
+    inputs.forEach(inp => {
+      const ok = Math.abs(parseNum(inp.value) - parseNum(inp.dataset.ans)) < 1e-3;
+      inp.classList.toggle("ok", ok); inp.classList.toggle("no", !ok);
+      if (ok) right++;
+    });
+    const v = q.querySelector(".verdict");
+    const all = right === inputs.length;
+    v.className = "verdict " + (all ? "ok" : "no");
+    v.textContent = all ? "All correct." : `${right} of ${inputs.length} correct. The red boxes need another look.`;
+  };
+});
+
+$("deal").onclick = () => deal(false);
+$("dealQ").onclick = () => deal(true);
+$("aCheck").onclick = () => act("check");
+$("aBet").onclick = () => act("bet");
+$("aFold").onclick = () => act("fold");
+$("aCall").onclick = () => act("call");
+$("peek").onchange = render;
+render();
+</script>
+
+</html>

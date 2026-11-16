@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play the Games</title>
+<style>
+:root {
+  --bg: #f7f6f2; --panel: #ffffff; --fg: #1d1d1b; --muted: #66655f; --rule: #e2e0d8;
+  --cell: #f0eee8; --accent: #2f62b8; --accent-fg: #ffffff; --p0: #2f62b8; --p1: #c4532a;
+  --good: #2c7a4b; --bad: #b23b2b; --card: #fffdf7; --card-edge: #cfcabb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151614; --panel: #1e1f1c; --fg: #ebe9e3; --muted: #a09e96; --rule: #34352f;
+    --cell: #2a2b27; --accent: #86aef0; --accent-fg: #10120f; --p0: #86aef0; --p1: #f0956c;
+    --good: #79c897; --bad: #ec8577; --card: #2c2d29; --card-edge: #4a4b44;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151614; --panel: #1e1f1c; --fg: #ebe9e3; --muted: #a09e96; --rule: #34352f;
+  --cell: #2a2b27; --accent: #86aef0; --accent-fg: #10120f; --p0: #86aef0; --p1: #f0956c;
+  --good: #79c897; --bad: #ec8577; --card: #2c2d29; --card-edge: #4a4b44;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+header { padding: 20px 16px 8px; max-width: 1100px; margin: 0 auto; }
+header h1 { margin: 0 0 4px; font-size: 1.5rem; }
+header p { margin: 0; color: var(--muted); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+  max-width: 1100px; margin: 12px auto 0; padding: 0 16px; }
+label { color: var(--muted); font-size: 0.9rem; }
+select, button { font: inherit; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+button:disabled { opacity: 0.45; cursor: default; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px;
+  max-width: 1100px; margin: 16px auto 48px; padding: 0 16px; }
+@media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+section { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; min-width: 0; }
+h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; }
+h2:not(:first-child) { margin-top: 18px; }
+.rules p, .rules li { margin: 4px 0; }
+.rules ul { padding-left: 1.2em; margin: 4px 0; }
+.lesson { border-left: 3px solid var(--accent); padding: 2px 0 2px 12px; margin-top: 8px; }
+table.info { border-collapse: collapse; width: 100%; }
+table.info td { padding: 5px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.info td:first-child { color: var(--muted); padding-right: 12px; white-space: nowrap; }
+table.info td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hidden-line { margin-top: 8px; color: var(--muted); font-size: 0.92rem; }
+.status { font-weight: 600; margin: 12px 0 6px; min-height: 1.5em; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.actions button { min-width: 64px; }
+.result { font-size: 1.15rem; font-weight: 700; margin: 10px 0 0; }
+.result.win { color: var(--good); } .result.lose { color: var(--bad); }
+.log { font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--cell);
+  border-radius: 6px; padding: 8px 10px; max-height: 210px; overflow: auto; margin: 0; white-space: pre-wrap; }
+.score { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 0.92rem; }
+.card { display: inline-block; min-width: 1.7em; padding: 1px 6px; border: 1px solid var(--card-edge);
+  border-radius: 5px; background: var(--card); text-align: center; font-weight: 700; }
+.board { display: grid; gap: 4px; margin: 10px 0; max-width: 340px; }
+.board.c4 { max-width: 400px; }
+.board button { aspect-ratio: 1; padding: 0; font-size: 1.4rem; font-weight: 700; background: var(--cell); border-radius: 6px; }
+.board.c4 button { border-radius: 50%; font-size: 0; }
+.board button.X { color: var(--p0); } .board button.O { color: var(--p1); }
+.board.c4 button.X { background: var(--p0); } .board.c4 button.O { background: var(--p1); }
+.board button.win { outline: 3px solid var(--good); }
+.analysis { max-width: 1100px; margin: 0 auto 48px; padding: 0 16px; }
+.analysis > section { margin-bottom: 16px; }
+.analysis .sub { color: var(--muted); font-size: 0.9rem; margin: 2px 0 10px; }
+.analysis .opts { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 6px 0 4px; }
+.analysis input[type=number] { width: 70px; font: inherit; color: var(--fg); background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 6px; padding: 4px 6px; }
+.tw { overflow-x: auto; margin: 6px 0 4px; }
+table.q { border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; min-width: 100%; }
+table.q th, table.q td { padding: 5px 9px; border-bottom: 1px solid var(--rule); text-align: right; white-space: nowrap; }
+table.q th { color: var(--muted); font-weight: 600; }
+table.q th:first-child, table.q td:first-child { text-align: left; }
+table.q tr.true td { background: var(--cell); font-weight: 600; }
+table.q td.hid { color: var(--muted); font-style: italic; }
+table.q td.pos { color: var(--good); } table.q td.neg { color: var(--bad); }
+.istate { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--cell);
+  border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin: 6px 0; }
+.legend { color: var(--muted); font-size: 0.85rem; margin: 6px 0 0; }
+.legend code, .formula code { font-size: 0.85rem; }
+.formula { font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--cell);
+  border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin: 6px 0; overflow-x: auto; }
+.review { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.review button.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.note { color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Play the games</h1>
+  <p>Every game in <code>rlgames/games/</code>, playable against a bot. The rules match the Python
+  implementations. The panel on the right shows exactly what you know when you act: your information set.</p>
+</header>
+<div class="controls">
+  <label>Game <select id="game"></select></label>
+  <label>Your seat <select id="seat"><option value="0">Player 0 (first)</option><option value="1">Player 1 (second)</option></select></label>
+  <label>Bot <select id="bot"></select></label>
+  <button class="primary" id="new">New game</button>
+</div>
+<main>
+  <section class="rules">
+    <h2>Rules</h2>
+    <div id="rules"></div>
+    <h2>Try this</h2>
+    <div id="lesson" class="lesson"></div>
+  </section>
+  <section>
+    <h2>What you know</h2>
+    <table class="info" id="info"></table>
+    <div class="hidden-line" id="hidden"></div>
+    <div id="board"></div>
+    <div class="status" id="status"></div>
+    <div class="actions" id="actions"></div>
+    <div class="result" id="result"></div>
+    <h2>History</h2>
+    <pre class="log" id="log"></pre>
+    <h2>Score</h2>
+    <div class="score" id="score"></div>
+  </section>
+</main>
+<div class="analysis">
+  <section>
+    <h2>Quantities at this decision</h2>
+    <p class="sub" id="aWho"></p>
+    <div class="opts">
+      <label>Policy assumed for your future moves <select id="myPol"></select></label>
+      <label>η <input type="number" id="eta" value="0.5" step="0.1" min="0"></label>
+      <label>τ <input type="number" id="tau" value="0.2" step="0.1" min="0"></label>
+    </div>
+    <div class="review" id="review"></div>
+    <div id="aBody"></div>
+  </section>
+</div>
+<script>
+"use strict";
+const CH = "chance", TERM = "terminal";
+const $ = (id) => document.getElementById(id);
+const clone = (s) => JSON.parse(JSON.stringify(s));
+const card = (t) => `<span class="card">${t}</span>`;
+const sign = (x) => (x > 0 ? 1 : x < 0 ? -1 : 0);
+const fmtNum = (x) => (Math.abs(x) < 1e-9 ? "0" : (x > 0 ? "+" : "") + (+x.toFixed(3)).toString());
+const uniform = (n) => Array(n).fill(1 / n);
+
+function sampleIdx(probs) {
+  let u = Math.random(), acc = 0;
+  for (let i = 0; i < probs.length; i++) { acc += probs[i]; if (u < acc) return i; }
+  return probs.length - 1;
+}
+
+// ---------- Matrix games ----------
+function matrixGame(id, title, names, A, rules, lesson, bots) {
+  return {
+    id, title, rules, lesson, value: [0, 0],
+    init: () => ({ player: 0, a: [-1, -1], terminal: false, returns: [0, 0] }),
+    actions: () => names.map((n, i) => ({ a: i, label: n })),
+    step(s, a) {
+      s = clone(s);
+      if (s.player === 0) { s.a[0] = a; s.player = 1; }
+      else { s.a[1] = a; const r = A[s.a[0]][a]; s.returns = [r, -r]; s.terminal = true; s.player = TERM; }
+      return s;
+    },
+    event(s, a, v) { return s.player === v ? `You: ${names[a]}` : "AI chose (hidden from you)"; },
+    reveal(s, v) { return `AI played ${names[s.a[1 - v]]}.`; },
+    hiddenDesc(s, p) { return p === 1 && s.a[0] >= 0 ? `opponent played ${names[s.a[0]]}` : ""; },
+    panel(s, v) {
+      const P = names.map((_, i) => names.map((_, j) => (v === 0 ? A[i][j] : -A[j][i])));
+      const rows = names.map((n, i) => [`Your payoff for ${n}`, P[i].map(fmtNum).join(" / ")]);
+      rows.unshift(["…against AI playing", names.join(" / ")]);
+      return rows;
+    },
+    hidden(s, v) {
+      return v === 1 && s.player === 1
+        ? "The AI has already chosen, but you can't see it. All three of its choices look the same to you, so they form one information set."
+        : "Moves are simultaneous: neither player sees the other's choice until the end.";
+    },
+    bots,
+  };
+}
+
+const RPS = ["Rock", "Paper", "Scissors"];
+const matrixBots = (nash, lean, leanName) => ({
+  "Equilibrium": () => nash,
+  [leanName]: () => lean,
+  "Uniform random": () => uniform(nash.length),
+});
+
+// ---------- Kuhn poker ----------
+const KC = ["J", "Q", "K"];
+const kuhn = {
+  id: "kuhn_poker", title: "Kuhn poker", value: [-1 / 18, 1 / 18],
+  rules: `<p>Three cards, J &lt; Q &lt; K. Each player antes 1 chip and gets one card face down.</p>
+<ul><li>Player 0 checks or bets 1.</li>
+<li>After a check, player 1 checks (showdown for 1) or bets 1; player 0 then calls (showdown for 2) or folds.</li>
+<li>After a bet, player 1 calls (showdown for 2) or folds.</li>
+<li>Higher card wins the showdown. A fold loses the chips already put in.</li></ul>
+<p>Equilibrium value: −1/18 per hand for player 0, +1/18 for player 1.</p>`,
+  lesson: `Play player 1, hold <b>Q</b>, and wait for the AI to bet. The AI could hold J (a bluff) or K. Both
+histories look identical to you: that pair is one <i>information set</i>. Against the equilibrium bot, calling and
+folding with Q there earn the same on average. Can you see why from how often it bets J vs K?`,
+  init: () => ({ player: CH, cards: [-1, -1], contrib: [1, 1], moves: [], terminal: false, returns: [0, 0] }),
+  chance(s) {
+    const rest = [0, 1, 2].filter((c) => !s.cards.includes(c));
+    return rest.map((c) => [c, 1 / rest.length]);
+  },
+  stepChance(s, c) {
+    s = clone(s);
+    if (s.cards[0] < 0) s.cards[0] = c; else { s.cards[1] = c; s.player = 0; }
+    return s;
+  },
+  actions(s) {
+    const p = s.player, facing = s.contrib[p] < s.contrib[1 - p];
+    return [{ a: 0, label: facing ? "Fold" : "Check" }, { a: 1, label: facing ? "Call" : "Bet" }];
+  },
+  step(s, a) {
+    const label = this.actions(s)[a].label;
+    s = clone(s);
+    const p = s.player, facing = s.contrib[p] < s.contrib[1 - p];
+    s.contrib[p] += a;
+    const fold = a === 0 && facing, call = a === 1 && facing;
+    const checkCheck = a === 0 && !facing && s.moves.length === 1;
+    s.moves.push(label);
+    if (fold || call || checkCheck) {
+      const r0 = fold ? (p === 0 ? -s.contrib[0] : s.contrib[1])
+        : (s.cards[0] > s.cards[1] ? s.contrib[1] : -s.contrib[0]);
+      s.returns = [r0, -r0]; s.terminal = true; s.player = TERM;
+    } else s.player = 1 - p;
+    return s;
+  },
+  chanceEvent(s, c, v) {
+    const seat = s.cards[0] < 0 ? 0 : 1;
+    return seat === v ? `You are dealt ${KC[c]}` : "AI is dealt a card (hidden)";
+  },
+  reveal(s, v) { return `AI held ${KC[s.cards[1 - v]]}.`; },
+  hiddenDesc(s, p) { return `opponent holds ${KC[s.cards[1 - p]]}`; },
+  outcomeName(s, c) { return `deal ${KC[c]} to P${s.cards[0] < 0 ? 0 : 1}`; },
+  panel(s, v) {
+    return [
+      ["Your card", s.cards[v] >= 0 ? card(KC[s.cards[v]]) : "–"],
+      ["Betting so far", s.moves.length ? s.moves.join(" → ") : "none"],
+      ["Pot", s.contrib[0] + s.contrib[1]],
+      ["Your chips in", s.contrib[v]],
+    ];
+  },
+  hidden(s, v) {
+    if (s.cards[v] < 0) return "";
+    const opts = [0, 1, 2].filter((c) => c !== s.cards[v]).map((c) => KC[c]);
+    return `Hidden: the AI holds ${opts.join(" or ")}. Every history that differs only in that card is in your information set.`;
+  },
+  bots: {
+    // One member of the equilibrium family (alpha = 1/3).
+    "Equilibrium": (s) => {
+      const c = s.cards[s.player], h = s.moves.join(",");
+      let bet;
+      if (s.player === 0 && h === "") bet = [1 / 3, 0, 1][c];
+      else if (s.player === 0) bet = [0, 2 / 3, 1][c];
+      else if (h === "Check") bet = [1 / 3, 0, 1][c];
+      else bet = [0, 1 / 3, 1][c];
+      return [1 - bet, bet];
+    },
+    "Never bluffs": (s) => {
+      const c = s.cards[s.player];
+      return c === 2 ? [0, 1] : c === 1 && s.contrib[s.player] < s.contrib[1 - s.player] ? [0.5, 0.5] : [1, 0];
+    },
+    "Uniform random": () => [0.5, 0.5],
+  },
+};
+
+// ---------- Leduc poker ----------
+const lcard = (c) => "JQK"[c >> 1] + "♠♥"[c & 1];
+const leduc = {
+  id: "leduc_poker", title: "Leduc poker", value: [-0.0856, 0.0856],
+  rules: `<p>Six cards: J, Q, K in two suits. Each player antes 1 and gets one private card.</p>
+<ul><li>Two betting rounds. Bets and raises are 2 chips in round 1 and 4 in round 2, at most two per round.</li>
+<li>Fold is only allowed when facing a bet.</li>
+<li>After round 1 a public card is dealt.</li>
+<li>Showdown: pairing the public card wins; otherwise the higher card; equal ranks split.</li></ul>
+<p>Equilibrium value: about −0.086 per hand for player 0.</p>`,
+  lesson: `Notice how the public card changes what your private card is worth: a J is the worst hand until a J
+comes up. Suits never matter, so the repo merges suit-only differences into one information set (288 in total).`,
+  init: () => ({ player: CH, cards: [-1, -1], pub: -1, round: 0, contrib: [1, 1], raises: 0, rmoves: 0,
+    hist: [[], []], terminal: false, returns: [0, 0] }),
+  chance(s) {
+    const rest = [0, 1, 2, 3, 4, 5].filter((c) => !s.cards.includes(c) && c !== s.pub);
+    return rest.map((c) => [c, 1 / rest.length]);
+  },
+  stepChance(s, c) {
+    s = clone(s);
+    if (s.cards[0] < 0) s.cards[0] = c;
+    else if (s.cards[1] < 0) { s.cards[1] = c; s.player = 0; }
+    else { s.pub = c; s.player = 0; }
+    return s;
+  },
+  actions(s) {
+    const p = s.player, facing = s.contrib[p] < s.contrib[1 - p], out = [];
+    if (facing) out.push({ a: 0, label: "Fold" });
+    out.push({ a: 1, label: facing ? "Call" : "Check" });
+    if (s.raises < 2) out.push({ a: 2, label: facing ? "Raise" : "Bet" });
+    return out;
+  },
+  step(s, a) {
+    const label = this.actions(s).find((x) => x.a === a).label;
+    s = clone(s);
+    const p = s.player, size = s.round === 0 ? 2 : 4, top = Math.max(...s.contrib);
+    if (a !== 0) s.contrib[p] = a === 2 ? top + size : top;
+    if (a === 2) s.raises++;
+    s.hist[s.round].push(label);
+    const fold = a === 0, roundOver = a === 1 && s.rmoves >= 1;
+    const showdown = roundOver && s.round === 1, dealPub = roundOver && s.round === 0;
+    if (fold || showdown) {
+      let r0;
+      if (fold) r0 = p === 0 ? -s.contrib[0] : s.contrib[1];
+      else {
+        const pr = s.pub >> 1, st = s.cards.map((c) => (c >> 1) + 3 * ((c >> 1) === pr ? 1 : 0));
+        r0 = sign(st[0] - st[1]) * s.contrib[0];
+      }
+      s.returns = [r0, -r0]; s.terminal = true; s.player = TERM;
+    } else if (dealPub) { s.player = CH; s.round = 1; s.raises = 0; s.rmoves = 0; }
+    else { s.player = 1 - p; s.rmoves++; }
+    return s;
+  },
+  chanceEvent(s, c, v) {
+    if (s.cards[0] < 0) return v === 0 ? `You are dealt ${lcard(c)}` : "AI is dealt a card (hidden)";
+    if (s.cards[1] < 0) return v === 1 ? `You are dealt ${lcard(c)}` : "AI is dealt a card (hidden)";
+    return `Public card: ${lcard(c)}`;
+  },
+  reveal(s, v) { return `AI held ${lcard(s.cards[1 - v])}.`; },
+  hiddenDesc(s, p) { return `opponent holds ${lcard(s.cards[1 - p])}`; },
+  outcomeName(s, c) {
+    return s.cards[0] < 0 ? `deal ${lcard(c)} to P0` : s.cards[1] < 0 ? `deal ${lcard(c)} to P1` : `public ${lcard(c)}`;
+  },
+  panel(s, v) {
+    return [
+      ["Your card", s.cards[v] >= 0 ? card(lcard(s.cards[v])) : "–"],
+      ["Public card", s.pub >= 0 ? card(lcard(s.pub)) : "not yet"],
+      ["Round 1 betting", s.hist[0].join(" → ") || "none"],
+      ["Round 2 betting", s.hist[1].join(" → ") || (s.round === 1 ? "none" : "–")],
+      ["Pot", s.contrib[0] + s.contrib[1]],
+      ["Your chips in", s.contrib[v]],
+    ];
+  },
+  hidden(s, v) {
+    if (s.cards[v] < 0) return "";
+    const opts = [0, 1, 2, 3, 4, 5].filter((c) => c !== s.cards[v] && c !== s.pub).map(lcard);
+    return `Hidden: the AI holds one of ${opts.join(", ")}.`;
+  },
+  bots: {
+    "Rule of thumb": (s) => {
+      const acts = leduc.actions(s), p = s.player, r = s.cards[p] >> 1;
+      const pair = s.pub >= 0 && r === s.pub >> 1, facing = s.contrib[p] < s.contrib[1 - p];
+      let want;
+      if (pair || (s.pub < 0 && r === 2)) want = 2;
+      else if (r === 0 && facing) want = 0;
+      else want = 1;
+      if (!acts.some((x) => x.a === want)) want = 1;
+      return acts.map((x) => (x.a === want ? 1 : 0));
+    },
+    "Uniform random": (s) => uniform(leduc.actions(s).length),
+  },
+};
+
+// ---------- Goofspiel ----------
+const GK = 4;
+const goof = {
+  id: "goofspiel", title: "Goofspiel (4 cards)", value: [0, 0],
+  rules: `<p>Each player holds cards 1–4. Four prize cards (worth 1–4) are revealed one at a time in random order.</p>
+<ul><li>For each prize, both players bid one of their cards at the same time.</li>
+<li>The higher bid wins the prize's value; equal bids discard it. Bids are revealed after each round.</li>
+<li>Whoever has more points at the end wins (+1), or it's a draw (0).</li></ul>
+<p>In the repo, player 0 bids first and player 1 can't see that bid: a simultaneous move written as a sequence.</p>`,
+  lesson: `Bids are revealed after each round, so you always know which cards the AI has left. The only hidden things
+are its bid this round and the order of future prizes. Is it worth spending your 4 on the 4-prize?`,
+  init: () => ({ player: CH, hands: [[1, 1, 1, 1], [1, 1, 1, 1]], prizes: [], bids: [[], []], points: [0, 0],
+    round: 0, terminal: false, returns: [0, 0] }),
+  chance(s) {
+    const rest = [0, 1, 2, 3].filter((c) => !s.prizes.includes(c));
+    return rest.map((c) => [c, 1 / rest.length]);
+  },
+  stepChance(s, c) { s = clone(s); s.prizes.push(c); s.player = 0; return s; },
+  actions(s) {
+    return [0, 1, 2, 3].filter((c) => s.hands[s.player][c]).map((c) => ({ a: c, label: `Bid ${c + 1}` }));
+  },
+  step(s, a) {
+    s = clone(s);
+    const p = s.player;
+    s.hands[p][a] = 0; s.bids[p].push(a);
+    if (p === 0) { s.player = 1; return s; }
+    const b0 = s.bids[0][s.round], val = s.prizes[s.round] + 1;
+    if (b0 > a) s.points[0] += val; else if (a > b0) s.points[1] += val;
+    s.round++;
+    if (s.round === GK) {
+      const r0 = sign(s.points[0] - s.points[1]);
+      s.returns = [r0, -r0]; s.terminal = true; s.player = TERM;
+    } else s.player = CH;
+    return s;
+  },
+  chanceEvent(s, c) { return `Prize card: ${c + 1}`; },
+  event(s, a, v) {
+    if (s.player === 0) return v === 0 ? `You bid ${a + 1}` : "AI placed a hidden bid";
+    const b0 = s.bids[0][s.round], mine = v === 0 ? b0 : a, theirs = v === 0 ? a : b0;
+    const who = mine > theirs ? "you win it" : theirs > mine ? "AI wins it" : "tie, discarded";
+    return (v === 1 ? `You bid ${a + 1}\n` : "") + `  → you ${mine + 1} vs AI ${theirs + 1}: ${who}`;
+  },
+  reveal(s, v) { return `Final points: you ${s.points[v]}, AI ${s.points[1 - v]}.`; },
+  hiddenDesc(s, p) { return p === 1 && s.player === 1 ? `opponent bid ${s.bids[0][s.round] + 1}` : ""; },
+  outcomeName(s, c) { return `prize ${c + 1}`; },
+  // Everything that affects future play and payoffs; merges transpositions.
+  evKey(s) {
+    const rem = [0, 1, 2, 3].filter((c) => !s.prizes.includes(c));
+    return JSON.stringify([s.hands, s.points, rem, s.player === CH ? -1 : s.prizes[s.round],
+      s.player === 1 ? s.bids[0][s.round] : -1, s.player, s.round]);
+  },
+  panel(s, v) {
+    const cards = (arr) => arr.map((c) => c + 1).join(" ") || "none";
+    const done = s.round;
+    return [
+      ["Current prize", s.prizes.length > done ? card(s.prizes[done] + 1) : "–"],
+      ["Past prizes", cards(s.prizes.slice(0, done))],
+      ["Your hand", cards([0, 1, 2, 3].filter((c) => s.hands[v][c]))],
+      ["AI's hand (known from its bids)", cards([0, 1, 2, 3].filter((c) => !s.bids[1 - v].slice(0, done).includes(c)))],
+      ["Points (you / AI)", `${s.points[v]} / ${s.points[1 - v]}`],
+    ];
+  },
+  hidden(s, v) {
+    return v === 1 && s.player === 1
+      ? "Hidden: the AI has already bid this round. You can't see which card."
+      : "Hidden: the order of future prizes.";
+  },
+  bots: {
+    "Bid near the prize": (s) => {
+      const acts = goof.actions(s), prize = s.prizes[s.round];
+      let best = acts[0];
+      for (const x of acts) if (Math.abs(x.a - prize) < Math.abs(best.a - prize)) best = x;
+      return acts.map((x) => (x === best ? 1 : 0));
+    },
+    "Uniform random": (s) => uniform(goof.actions(s).length),
+  },
+};
+
+// ---------- Liar's dice ----------
+const FACE = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+const NB = 12, LIAR = 12;
+const bidText = (b) => `${Math.floor(b / 6) + 1} × ${b % 6 + 1}`;
+function holdProb(b, own) {
+  const q = Math.floor(b / 6) + 1, f = b % 6, need = q - (own === f ? 1 : 0);
+  return need <= 0 ? 1 : need === 1 ? 1 / 6 : 0;
+}
+const liars = {
+  id: "liars_dice", title: "Liar's dice (1 die each)", value: null,
+  rules: `<p>Each player rolls one six-sided die in secret.</p>
+<ul><li>Players alternate, starting with player 0. On your turn, raise the bid or call "Liar!".</li>
+<li>A bid "q × f" claims that at least q of the two dice show face f. Bids are ordered by quantity, then face.</li>
+<li>On a liar call both dice are revealed. If the bid holds, the bidder wins (+1); otherwise the caller wins.</li></ul>`,
+  lesson: `Your information set is your own die plus the bids so far; the AI's die is hidden until the end. The bids
+are a signal: a player who bids "2 × 5" is either holding a 5 or bluffing. How likely is each?`,
+  init: () => ({ player: CH, dice: [-1, -1], bids: [], last: -1, terminal: false, returns: [0, 0] }),
+  chance: () => [0, 1, 2, 3, 4, 5].map((f) => [f, 1 / 6]),
+  stepChance(s, f) {
+    s = clone(s);
+    if (s.dice[0] < 0) s.dice[0] = f; else { s.dice[1] = f; s.player = 0; }
+    return s;
+  },
+  actions(s) {
+    const out = [];
+    for (let b = s.last + 1; b < NB; b++) out.push({ a: b, label: bidText(b) });
+    if (s.last >= 0) out.push({ a: LIAR, label: "Liar!" });
+    return out;
+  },
+  step(s, a) {
+    s = clone(s);
+    const p = s.player;
+    if (a === LIAR) {
+      const q = Math.floor(s.last / 6) + 1, f = s.last % 6;
+      const holds = s.dice.filter((d) => d === f).length >= q;
+      const pw = holds ? -1 : 1, r0 = p === 0 ? pw : -pw;
+      s.returns = [r0, -r0]; s.terminal = true; s.player = TERM;
+    } else { s.bids.push(a); s.last = a; s.player = 1 - p; }
+    return s;
+  },
+  chanceEvent(s, f, v) {
+    const seat = s.dice[0] < 0 ? 0 : 1;
+    return seat === v ? `You rolled ${f + 1}` : "AI rolled (hidden)";
+  },
+  reveal(s, v) {
+    const q = Math.floor(s.last / 6) + 1, f = s.last % 6, n = s.dice.filter((d) => d === f).length;
+    return `AI rolled ${s.dice[1 - v] + 1}. Dice showing ${f + 1}: ${n} (bid was ${q}).`;
+  },
+  panel(s, v) {
+    return [
+      ["Your die", s.dice[v] >= 0 ? card(FACE[s.dice[v]] + " " + (s.dice[v] + 1)) : "–"],
+      ["Bids so far", s.bids.map(bidText).join(" → ") || "none"],
+      ["Current bid", s.last >= 0 ? `at least ${bidText(s.last).replace(" × ", " dice show ")}` : "none"],
+    ];
+  },
+  hidden() { return "Hidden: the AI's die (any of 1–6) until someone calls liar."; },
+  hiddenDesc(s, p) { return `opponent rolled ${s.dice[1 - p] + 1}`; },
+  outcomeName(s, c) { return `P${s.dice[0] < 0 ? 0 : 1} rolls ${c + 1}`; },
+  evKey(s) { return `${s.dice}|${s.last}|${s.player}`; },
+  bots: {
+    "Probability-minded": (s) => {
+      const acts = liars.actions(s), own = s.dice[s.player];
+      if (s.last >= 0 && holdProb(s.last, own) < 0.5) return acts.map((x) => (x.a === LIAR ? 1 : 0));
+      let best = null;
+      for (const x of acts) if (x.a !== LIAR && (!best || holdProb(x.a, own) > holdProb(best.a, own))) best = x;
+      if (!best || (s.last >= 0 && holdProb(best.a, own) < 0.5)) best = acts.find((x) => x.a === LIAR) || best;
+      return acts.map((x) => (x === best ? 1 : 0));
+    },
+    "Uniform random": (s) => uniform(liars.actions(s).length),
+  },
+};
+
+// ---------- m,n,k games ----------
+function mnkGame(id, title, rows, cols, k, gravity, value, rules, lesson) {
+  const n = rows * cols, lines = [];
+  for (const [dr, dc] of [[0, 1], [1, 0], [1, 1], [1, -1]])
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const cells = [];
+      for (let i = 0; i < k; i++) cells.push([r + i * dr, c + i * dc]);
+      if (cells.every(([rr, cc]) => rr >= 0 && rr < rows && cc >= 0 && cc < cols))
+        lines.push(cells.map(([rr, cc]) => rr * cols + cc));
+    }
+  const winLine = (board, p) => lines.find((l) => l.every((i) => board[i] === p));
+  const cellOf = (board, a) => {
+    if (!gravity) return a;
+    for (let r = rows - 1; r >= 0; r--) if (board[r * cols + a] < 0) return r * cols + a;
+    return -1;
+  };
+  const legal = (board) => gravity
+    ? [...Array(cols).keys()].filter((c) => board[c] < 0)
+    : [...Array(n).keys()].filter((i) => board[i] < 0);
+  const g = {
+    id, title, rules, lesson, value, rows, cols, gravity, winLine,
+    init: () => ({ player: 0, board: Array(n).fill(-1), moves: 0, terminal: false, returns: [0, 0] }),
+    actions(s) {
+      return legal(s.board).map((a) => ({ a, label: gravity ? `Column ${a + 1}` : `Row ${Math.floor(a / cols) + 1}, col ${a % cols + 1}` }));
+    },
+    step(s, a) {
+      s = clone(s);
+      const p = s.player;
+      s.board[cellOf(s.board, a)] = p; s.moves++;
+      const won = !!winLine(s.board, p);
+      if (won || s.moves === n) {
+        const r0 = won ? (p === 0 ? 1 : -1) : 0;
+        s.returns = [r0, -r0]; s.terminal = true; s.player = TERM;
+      } else s.player = 1 - p;
+      return s;
+    },
+    panel(s, v) { return [["You play", v === 0 ? "X (first)" : "O (second)"], ["Moves made", s.moves]]; },
+    hidden() { return "Nothing is hidden: perfect information. Each information set is a single state."; },
+    reveal() { return ""; },
+    hiddenDesc() { return ""; },
+    evKey: (s) => s.board.join("") + s.player,
+    noAnalysis: gravity, // Connect Four is too large to evaluate exactly
+    bots: {},
+  };
+  // Win now, else block, else avoid handing over a win, preferring central columns/cells.
+  const heuristic = (s) => {
+    const acts = g.actions(s), p = s.player, o = 1 - p;
+    const after = (b, a, who) => { const bb = b.slice(); bb[cellOf(b, a)] = who; return bb; };
+    let pick = acts.find((x) => winLine(after(s.board, x.a, p), p));
+    if (!pick) pick = acts.find((x) => winLine(after(s.board, x.a, o), o));
+    if (!pick) {
+      const safe = acts.filter((x) => {
+        const b = after(s.board, x.a, p);
+        return !legal(b).some((a2) => winLine(after(b, a2, o), o));
+      });
+      const pool = safe.length ? safe : acts;
+      const center = (a) => gravity ? Math.abs(a - (cols - 1) / 2) : Math.abs(Math.floor(a / cols) - 1) + Math.abs(a % cols - 1);
+      const best = Math.min(...pool.map((x) => center(x.a)));
+      const top = pool.filter((x) => center(x.a) === best);
+      pick = top[Math.floor(Math.random() * top.length)];
+    }
+    return acts.map((x) => (x === pick ? 1 : 0));
+  };
+  if (!gravity) {
+    const memo = new Map();
+    const negamax = (board, p) => { // value for the player to move
+      const key = board.join(",") + p;
+      if (memo.has(key)) return memo.get(key);
+      let best = -2;
+      const moves = legal(board);
+      if (!moves.length) best = 0;
+      for (const a of moves) {
+        const b = board.slice(); b[a] = p;
+        const v = winLine(b, p) ? 1 : -negamax(b, 1 - p);
+        if (v > best) best = v;
+      }
+      memo.set(key, best);
+      return best;
+    };
+    g.bots["Perfect (minimax)"] = (s) => {
+      const acts = g.actions(s), p = s.player;
+      const vals = acts.map((x) => { const b = s.board.slice(); b[x.a] = p; return winLine(b, p) ? 1 : -negamax(b, 1 - p); });
+      const m = Math.max(...vals), cnt = vals.filter((v) => v === m).length;
+      return vals.map((v) => (v === m ? 1 / cnt : 0));
+    };
+  } else g.bots["Win, block, centre"] = heuristic;
+  g.bots["Uniform random"] = (s) => uniform(g.actions(s).length);
+  return g;
+}
+
+const GAMES = [
+  matrixGame("matching_pennies", "Matching pennies", ["Heads", "Tails"], [[1, -1], [-1, 1]],
+    `<p>Both players show a coin at the same time. Player 0 wins 1 if they match; player 1 wins 1 if they differ.</p>`,
+    `Against the equilibrium bot, every strategy you try earns 0 on average. That's indifference: at equilibrium your
+opponent leaves you nothing to exploit. Switch to the bot that leans Heads and find the exploit.`,
+    matrixBots([0.5, 0.5], [0.7, 0.3], "Leans Heads (70%)")),
+  matrixGame("rock_paper_scissors", "Rock-paper-scissors", RPS, [[0, -1, 1], [1, 0, -1], [-1, 1, 0]],
+    `<p>Rock beats scissors, scissors beats paper, paper beats rock. Win +1, tie 0, loss −1.</p>`,
+    `Play the leaning bot and track which action would have done best so far. That running total is exactly the
+regret tally from the lesson. Playing in proportion to its positive part is regret matching.`,
+    matrixBots([1 / 3, 1 / 3, 1 / 3], [0.5, 0.25, 0.25], "Leans Rock (50%)")),
+  matrixGame("biased_rock_paper_scissors", "Biased rock-paper-scissors", RPS, [[0, -1, 2], [1, 0, -1], [-2, 1, 0]],
+    `<p>Rock-paper-scissors, except rock beating scissors pays 2 (and scissors losing to rock costs 2). Every other
+win pays 1.</p><p>Equilibrium: rock ¼, paper ½, scissors ¼.</p>`,
+    `Rock's big win makes scissors risky, which makes paper safer… The equilibrium plays paper half the time. Check
+the payoff table on the right: against (¼, ½, ¼), all three of your actions earn the same. This is the game on the
+self-play orbits page.`,
+    matrixBots([0.25, 0.5, 0.25], [1 / 3, 1 / 3, 1 / 3], "Uniform (not equilibrium here)")),
+  kuhn, leduc, goof, liars,
+  mnkGame("tic_tac_toe", "Tic-tac-toe", 3, 3, 3, false, [0, 0],
+    `<p>Players alternate marking cells on a 3×3 grid; X moves first. Three in a row wins.</p><p>With perfect play it's a draw.</p>`,
+    `Perfect information: you see the whole state, so there's nothing to bluff about and no mixing needed. The minimax
+bot never loses. Compare with Kuhn, where the best strategy must be random.`),
+  mnkGame("connect_four", "Connect Four", 6, 7, 4, true, [1, -1],
+    `<p>Players alternate dropping a disc into a column of a 6×7 board; it falls to the lowest empty cell. Four in a
+row (any direction) wins. Player 0 moves first.</p><p>With perfect play, the first player wins.</p>`,
+    `Too large to enumerate (the repo has no exact exploitability for it). The bot here only looks one move ahead:
+win, block, avoid giving you a win. Find a way to set up two threats at once.`),
+];
+
+// ---------- Generic loop ----------
+let G = GAMES[0], s = null, seat = 0, log = [], busy = false, gen = 0;
+let decisions = [], reviewIdx = -1, cache = { key: null, val: null };
+const scores = {}, tally = {};
+
+// What player p observes when action a is taken at st. Two histories are in the same
+// information set for p exactly when p's observation sequences agree.
+function obsToken(st, a, p) {
+  if (st.player === CH) return G.chanceEvent ? G.chanceEvent(st, a, p) : `chance ${a}`;
+  if (G.event) return G.event(st, a, p);
+  return `${st.player === p ? "You" : "AI"}: ${G.actions(st).find((x) => x.a === a).label}`;
+}
+const isHidden = (tok) => /hidden/.test(tok);
+function trueLabel(st, a) {
+  if (st.player === CH) return `chance: ${G.outcomeName ? G.outcomeName(st, a) : a}`;
+  return `P${st.player}: ${G.actions(st).find((x) => x.a === a).label}`;
+}
+const takeStep = (st, a) => (st.player === CH ? G.stepChance(st, a) : G.step(st, a));
+function replay(seq) {
+  const out = [G.init()];
+  for (const a of seq) out.push(takeStep(out[out.length - 1], a));
+  return out;
+}
+
+// Policies used for every number: the human seat follows the "assumed" policy, the AI its bot.
+const polFor = (player) => (player === seat ? G.bots[$("myPol").value] : G.bots[$("bot").value]);
+
+function eventText(st, a) { return obsToken(st, a, seat); }
+
+function apply(a) {
+  const e = eventText(s, a);
+  if (e) log.push(e);
+  if (s.player !== CH) decisions.push({ seq: s.seq.slice(), p: s.player });
+  const seq = [...s.seq, a];
+  s = takeStep(s, a);
+  s.seq = seq;
+}
+
+function advance() {
+  while (!s.terminal && s.player === CH) {
+    const outs = G.chance(s);
+    apply(outs[sampleIdx(outs.map((o) => o[1]))][0]);
+  }
+  if (s.terminal) { finish(); return; }
+  if (s.player !== seat) {
+    busy = true;
+    const my = gen;
+    setTimeout(() => {
+      if (my !== gen) return;
+      const acts = G.actions(s), probs = G.bots[$("bot").value](s);
+      apply(acts[sampleIdx(probs)].a);
+      busy = false;
+      advance(); render();
+    }, 450);
+  }
+}
+
+function finish() {
+  const r = s.returns[seat];
+  const rev = G.reveal(s, seat);
+  if (rev) log.push(rev);
+  const sc = (scores[G.id + seat] ||= { n: 0, sum: 0, w: 0, l: 0, d: 0 });
+  sc.n++; sc.sum += r; if (r > 0) sc.w++; else if (r < 0) sc.l++; else sc.d++;
+}
+
+function newGame() {
+  gen++; busy = false;
+  seat = +$("seat").value;
+  s = G.init(); s.seq = []; log = []; decisions = []; reviewIdx = -1;
+  advance(); render();
+}
+
+function humanAct(a) {
+  if (busy || s.terminal || s.player !== seat) return;
+  const an = analysisFor(s.seq, seat);
+  if (an && !an.unreachable) {
+    const t = (tally[G.id + "|" + an.key] ||= { visits: 0, R: {} });
+    t.visits++;
+    an.acts.forEach((x, i) => { t.R[x.a] = (t.R[x.a] || 0) + an.r[i]; });
+  }
+  apply(a); advance(); render();
+}
+
+// ---------- Exact analysis ----------
+function analyze(seq, p) {
+  const states = replay(seq);
+  const target = states[states.length - 1];
+  const actual = seq.map((a, k) => obsToken(states[k], a, p));
+  const hist = [];
+  // Depth-first search over every action sequence whose observations for p match.
+  (function dfs(st, k, rc, rs, ro, path) {
+    if (k === seq.length) { hist.push({ st, rc, rs, ro, seq: path }); return; }
+    let outs;
+    if (st.player === CH) outs = G.chance(st);
+    else { const pr = polFor(st.player)(st); outs = G.actions(st).map((x, i) => [x.a, pr[i]]); }
+    for (const [a, pr] of outs) {
+      if (obsToken(st, a, p) !== actual[k]) continue;
+      const nx = takeStep(st, a);
+      if (st.player === CH) dfs(nx, k + 1, rc * pr, rs, ro, [...path, a]);
+      else if (st.player === p) dfs(nx, k + 1, rc, rs * pr, ro, [...path, a]);
+      else dfs(nx, k + 1, rc, rs, ro * pr, [...path, a]);
+    }
+  })(G.init(), 0, 1, 1, 1, []);
+
+  const memo = new Map();
+  const key = G.evKey || ((st) => JSON.stringify(st, (k, v) => (k === "seq" ? undefined : v)));
+  const ev = (st) => {
+    if (st.terminal) return st.returns[p];
+    const k = key(st);
+    if (memo.has(k)) return memo.get(k);
+    let v = 0;
+    if (st.player === CH) for (const [c, pr] of G.chance(st)) v += pr * ev(G.stepChance(st, c));
+    else {
+      const acts = G.actions(st), pr = polFor(st.player)(st);
+      acts.forEach((x, i) => { if (pr[i] > 0) v += pr[i] * ev(G.step(st, x.a)); });
+    }
+    memo.set(k, v);
+    return v;
+  };
+
+  const acts = G.actions(target), sigma = polFor(p)(target), n = acts.length;
+  for (const h of hist) {
+    h.reachOpp = h.rc * h.ro;
+    h.q = acts.map((x) => ev(G.step(h.st, x.a)));
+    h.v = h.q.reduce((t, q, i) => t + sigma[i] * q, 0);
+    h.isTrue = h.seq.join(",") === seq.join(",");
+  }
+  const Z = hist.reduce((t, h) => t + h.reachOpp, 0);
+  const reachSelf = hist.length ? hist[0].rs : 0;
+  const cfv = acts.map((_, i) => hist.reduce((t, h) => t + h.reachOpp * h.q[i], 0));
+  const cfvI = cfv.reduce((t, c, i) => t + sigma[i] * c, 0);
+  const r = cfv.map((c) => c - cfvI);
+  const qbar = Z > 0 ? cfv.map((c) => c / Z) : null;
+  const vbar = Z > 0 ? cfvI / Z : null;
+  const pos = r.map((x) => Math.max(x, 0)), ps = pos.reduce((a, b) => a + b, 0);
+  const rm = ps > 0 ? pos.map((x) => x / ps) : uniform(n);
+  const pg = r.map((x, i) => reachSelf * sigma[i] * x);
+  let mag = null;
+  const eta = +$("eta").value || 0, tau = +$("tau").value || 0;
+  if (qbar) {
+    const th = sigma.map((x) => Math.log(Math.max(x, 1e-6)));
+    const lm = Math.log(1 / n);
+    const nt = th.map((t, i) => (t + eta * qbar[i] + eta * tau * lm) / (1 + eta * tau));
+    const mx = Math.max(...nt), ex = nt.map((t) => Math.exp(t - mx)), es = ex.reduce((a, b) => a + b, 0);
+    mag = ex.map((e) => e / es);
+  }
+  return { p, states, target, actual, hist, acts, sigma, Z, reachSelf, cfv, cfvI, r, qbar, vbar, rm, pg, mag,
+    eta, tau, key: p + "|" + actual.join(" / "), unreachable: Z === 0 };
+}
+
+function analysisFor(seq, p) {
+  const k = [G.id, seat, $("bot").value, $("myPol").value, $("eta").value, $("tau").value, p, seq.join(",")].join("#");
+  if (cache.key !== k) cache = { key: k, val: G.noAnalysis ? null : analyze(seq, p) };
+  return cache.val;
+}
+
+// ---------- Rendering ----------
+const f3 = (x) => (x === null || x === undefined ? "—" : Math.abs(x) < 5e-10 ? "0" : (+x.toFixed(3)).toString());
+const sgn = (x) => (x > 1e-9 ? "pos" : x < -1e-9 ? "neg" : "");
+const who = (p) => (p === seat ? `you (P${p})` : `the AI (P${p})`);
+
+function historyTable(seq, p, reveal) {
+  const states = replay(seq);
+  const rows = seq.map((a, k) => {
+    const tok = obsToken(states[k], a, p), hid = isHidden(tok);
+    const tl = hid && !reveal ? "?" : trueLabel(states[k], a);
+    return `<tr><td>${k + 1}</td><td${hid && !reveal ? ' class="hid"' : ""}>${tl}</td><td${hid ? ' class="hid"' : ""}>${tok}</td></tr>`;
+  });
+  return `<div class="tw"><table class="q"><tr><th>step</th><th>true history h</th><th>what P${p} observed</th></tr>${rows.join("") || '<tr><td colspan="3">empty</td></tr>'}</table></div>
+<p class="legend">The true history <code>h</code> is every action so far, including chance and hidden moves. The right column is
+P${p}'s view of it. The sequence of these observations <i>is</i> P${p}'s information state: every history that produces the same column is in the same information set.</p>`;
+}
+
+function renderAnalysis() {
+  const body = $("aBody");
+  let seq, p, reveal;
+  if (reviewIdx >= 0) { ({ seq, p } = decisions[reviewIdx]); reveal = true; }
+  else if (!s.terminal && s.player === seat) { seq = s.seq; p = seat; reveal = false; }
+  else { seq = s.seq; p = seat; reveal = s.terminal; }
+
+  // Review buttons for every decision once the game is over.
+  const rv = $("review");
+  rv.innerHTML = "";
+  if (s.terminal) {
+    decisions.forEach((d, i) => {
+      const b = document.createElement("button");
+      b.textContent = `#${i + 1} ${d.p === seat ? "You" : "AI"} (P${d.p})`;
+      if (i === reviewIdx) b.className = "on";
+      b.onclick = () => { reviewIdx = i === reviewIdx ? -1 : i; render(); };
+      rv.appendChild(b);
+    });
+  }
+
+  const deciding = reviewIdx >= 0 || (!s.terminal && s.player === seat);
+  $("aWho").innerHTML = reviewIdx >= 0
+    ? `Reviewing decision #${reviewIdx + 1} by ${who(p)}, with everything revealed. All payoffs are from P${p}'s perspective.`
+    : s.terminal ? "Game over. Pick a decision above to see the quantities at that point, for either player."
+    : s.player === seat ? `Your decision as P${seat}. All payoffs are from your perspective. Nothing hidden is revealed.`
+    : "The AI is deciding. Its quantities would reveal its hidden information, so they appear in the review after the game.";
+
+  let html = `<h2>History and information state</h2>` + historyTable(seq, p, reveal);
+  if (!deciding) { body.innerHTML = html; return; }
+  if (G.noAnalysis) {
+    body.innerHTML = html + `<p class="note">Connect Four is too large to evaluate exactly, so q, counterfactual values, and regrets are not computed here.</p>`;
+    return;
+  }
+  const A = analysisFor(seq, p);
+  const names = A.acts.map((x) => x.label);
+  const pol = (pl) => (pl === seat ? `“${$("myPol").value}” (assumed for P${pl})` : `“${$("bot").value}” (the AI's bot)`);
+
+  html += `<h2>Information set I</h2>
+<div class="istate">P${p}'s information state:\n${A.actual.map((t, i) => `  ${i + 1}. ${t}`).join("\n") || "  (start of game)"}</div>
+<p class="legend">Numbers below assume P0 plays ${pol(0)} and P1 plays ${pol(1)}, from here to the end of the game.</p>
+<h2>Histories h in I</h2>
+<div class="tw"><table class="q"><tr><th>h differs by</th><th>chance</th><th>reach_opp</th><th>reach_self</th><th>P(h | I)</th>${names.map((n) => `<th>q(h, ${n})</th>`).join("")}<th>value(h)</th></tr>
+${A.hist.map((h) => `<tr class="${h.isTrue && reveal ? "true" : ""}"><td>${G.hiddenDesc(h.st, p) || "(nothing hidden)"}${h.isTrue && reveal ? " ← actual" : ""}</td>
+<td>${f3(h.rc)}</td><td>${f3(h.reachOpp)}</td><td>${f3(h.rs)}</td><td>${A.Z > 0 ? f3(h.reachOpp / A.Z) : "—"}</td>
+${h.q.map((q) => `<td>${f3(q)}</td>`).join("")}<td>${f3(h.v)}</td></tr>`).join("")}
+</table></div>
+<p class="legend"><code>reach_opp(h)</code> = chance probabilities × the opponent's action probabilities on the path to h.
+<code>reach_self</code> = P${p}'s own action probabilities on the path. It is the same for every h in I, because P${p} saw the same thing along each.
+<code>P(h | I) = reach_opp / Σ reach_opp</code> is the belief over hidden states.
+<code>q(h, a)</code> = expected payoff to P${p} after taking a at h, with both players following the policies above afterwards.
+<code>value(h) = Σ_a σ(I, a) q(h, a)</code>.</p>`;
+
+  if (A.unreachable) {
+    html += `<p class="note">Under these policies Σ reach_opp = 0: the opponent's policy never leads here. All counterfactual values are 0, so CFR would make no update at this information set.</p>`;
+  }
+  const t = tally[G.id + "|" + A.key];
+  const rmT = t ? (() => { const ps = A.acts.map((x) => Math.max(t.R[x.a] || 0, 0)), z = ps.reduce((a, b) => a + b, 0); return z > 0 ? ps.map((x) => x / z) : uniform(A.acts.length); })() : null;
+  html += `<h2>Per action at I</h2>
+<div class="tw"><table class="q"><tr><th>action a</th><th>σ(I, a)</th><th>q̄(I, a)</th><th>cfv(I, a)</th><th>r(I, a)</th><th>PG ∂/∂θ</th><th>RM from r</th><th>magnet step</th>${t ? "<th>session R</th><th>RM from R</th>" : ""}</tr>
+${A.acts.map((x, i) => `<tr><td>${x.label}</td><td>${f3(A.sigma[i])}</td><td>${A.qbar ? f3(A.qbar[i]) : "—"}</td><td>${f3(A.cfv[i])}</td>
+<td class="${sgn(A.r[i])}">${f3(A.r[i])}</td><td class="${sgn(A.pg[i])}">${f3(A.pg[i])}</td><td>${f3(A.rm[i])}</td><td>${A.mag ? f3(A.mag[i]) : "—"}</td>
+${t ? `<td class="${sgn(t.R[x.a] || 0)}">${f3(t.R[x.a] || 0)}</td><td>${f3(rmT[i])}</td>` : ""}</tr>`).join("")}
+<tr><td>whole I</td><td>1</td><td>${f3(A.vbar)}</td><td>${f3(A.cfvI)}</td><td></td><td></td><td></td><td></td>${t ? `<td colspan="2">${t.visits} visit${t.visits > 1 ? "s" : ""}</td>` : ""}</tr>
+</table></div>
+<div class="formula">σ(I, a)        P${p}'s policy here: ${A.p === seat ? "the assumed policy" : "the AI's bot"}
+q̄(I, a)        Σ_h P(h|I) q(h, a)                       belief-weighted action value (what search estimates)
+cfv(I, a)      Σ_h reach_opp(h) q(h, a)                 counterfactual value, not normalized   [Σ reach_opp = ${f3(A.Z)}]
+cfv(I)         Σ_a σ(I, a) cfv(I, a)
+r(I, a)        cfv(I, a) − cfv(I)                       instantaneous counterfactual regret = advantage × Σ reach_opp
+PG ∂/∂θ        reach_self · σ(I, a) · r(I, a)            softmax policy-gradient on this infoset's logits   [reach_self = ${f3(A.reachSelf)}]
+RM from r      max(r, 0) / Σ max(r, 0)                  regret matching after one iteration from R = 0
+magnet step    softmax((log σ + η q̄ + η τ log m) / (1 + η τ)),  m uniform,  η = ${A.eta}, τ = ${A.tau}${t ? `
+session R      Σ of r over your visits to this I this session (only updated when you play here; CFR updates every I every iteration)` : ""}</div>
+<p class="legend">Two things to notice: CFR's regret has no <code>reach_self</code> factor, so it is the same size even at spots you rarely
+reach, while the policy gradient shrinks with <code>reach_self</code>. And <code>q̄ = cfv / Σ reach_opp</code>, so normalizing by the belief changes the scale of regret but not its sign.</p>`;
+  body.innerHTML = html;
+}
+
+function render() {
+  $("info").innerHTML = G.panel(s, seat).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("");
+  $("hidden").textContent = s.terminal ? "" : G.hidden(s, seat);
+  renderBoard();
+  const acts = $("actions");
+  acts.innerHTML = "";
+  if (!s.terminal && s.player === seat && !G.rows) {
+    for (const x of G.actions(s)) {
+      const b = document.createElement("button");
+      b.textContent = x.label;
+      b.onclick = () => humanAct(x.a);
+      acts.appendChild(b);
+    }
+  }
+  $("status").textContent = s.terminal ? "Game over." : s.player === seat ? "Your move." : "AI is thinking…";
+  const res = $("result");
+  if (s.terminal) {
+    const r = s.returns[seat];
+    res.textContent = r > 0 ? `You win ${fmtNum(r)}` : r < 0 ? `You lose ${fmtNum(r)}` : "Draw (0)";
+    res.className = "result " + (r > 0 ? "win" : r < 0 ? "lose" : "");
+  } else { res.textContent = ""; res.className = "result"; }
+  $("log").textContent = log.join("\n");
+  $("log").scrollTop = 1e9;
+  const sc = scores[G.id + seat];
+  let txt = sc ? `${sc.n} games as player ${seat}: ${sc.w} won, ${sc.l} lost, ${sc.d} drawn. Average ${fmtNum(sc.sum / sc.n)} per game.`
+    : `No games yet as player ${seat}.`;
+  if (G.value) txt += ` Equilibrium value for your seat: ${fmtNum(G.value[seat])}.`;
+  $("score").textContent = txt;
+  renderAnalysis();
+}
+
+function renderBoard() {
+  const box = $("board");
+  if (!G.rows) { box.innerHTML = ""; return; }
+  const line = s.terminal ? (G.winLine(s.board, 0) || G.winLine(s.board, 1) || []) : [];
+  const myTurn = !s.terminal && s.player === seat;
+  const legal = new Set(G.actions(s).map((x) => x.a));
+  box.innerHTML = `<div class="board ${G.gravity ? "c4" : ""}" style="grid-template-columns: repeat(${G.cols}, 1fr)"></div>`;
+  const grid = box.firstChild;
+  s.board.forEach((v, i) => {
+    const b = document.createElement("button");
+    const mark = v === 0 ? "X" : v === 1 ? "O" : "";
+    b.textContent = mark; b.className = mark + (line.includes(i) ? " win" : "");
+    const a = G.gravity ? i % G.cols : i;
+    b.setAttribute("aria-label", G.gravity ? `Column ${a + 1}` : `Cell ${i + 1}`);
+    b.disabled = !myTurn || !legal.has(a);
+    b.onclick = () => humanAct(a);
+    grid.appendChild(b);
+  });
+}
+
+function selectGame(id) {
+  G = GAMES.find((g) => g.id === id);
+  $("rules").innerHTML = G.rules;
+  $("lesson").innerHTML = G.lesson;
+  const opts = Object.keys(G.bots).map((b) => `<option>${b}</option>`).join("");
+  $("bot").innerHTML = opts;
+  $("myPol").innerHTML = opts;
+  $("bot").value = $("myPol").value = Object.keys(G.bots)[0];
+  try { localStorage.setItem("rlgames-play-game", id); } catch (e) {}
+  newGame();
+}
+
+$("game").innerHTML = GAMES.map((g) => `<option value="${g.id}">${g.title}</option>`).join("");
+$("game").onchange = (e) => selectGame(e.target.value);
+$("seat").onchange = newGame;
+$("bot").onchange = newGame;
+$("new").onclick = newGame;
+for (const id of ["myPol", "eta", "tau"]) $(id).addEventListener("input", render);
+let start = GAMES[0].id;
+try {
+  const fromHash = location.hash.slice(1), saved = localStorage.getItem("rlgames-play-game");
+  start = [fromHash, saved].find((x) => GAMES.some((g) => g.id === x)) || start;
+} catch (e) {}
+$("game").value = start;
+selectGame(start);
+</script>
+</body>
+</html>

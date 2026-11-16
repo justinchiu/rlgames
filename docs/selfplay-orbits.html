@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-Play Orbits</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: shared controls on top, then small multiples (one panel per learning rule, same game, same start, run in lockstep), then the update rules written out. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #fcfcfb;
+  --ink: #0f1419;
+  --ink-2: #4a5360;
+  --line: #d6dce4;
+  --grid: #e7ebf0;
+  --cur: #2a78d6;      /* categorical slot 1: current policy */
+  --avg: #eb6834;      /* categorical slot 2: average policy */
+  --focus: #2a78d6;
+  --font-display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --font-body: "Source Sans 3", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --surface: #1a1a19; --ink: #eef0f2; --ink-2: #a9b1bc; --line: #2f343b; --grid: #262a30;
+    --cur: #3987e5; --avg: #d95926; --focus: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --surface: #1a1a19; --ink: #eef0f2; --ink-2: #a9b1bc; --line: #2f343b; --grid: #262a30;
+  --cur: #3987e5; --avg: #d95926; --focus: #3987e5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 64px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 18px; }
+header h1 { font-family: var(--font-display); font-weight: 700; font-size: 34px; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--ink-2); max-width: 80ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.ctl { display: grid; gap: 4px; }
+.ctl > span { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+select, input[type=range] { font: inherit; font-size: 15px; }
+select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+input[type=range] { width: 120px; accent-color: var(--cur); }
+.val { font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+.btns { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+button { font: inherit; font-weight: 600; font-size: 15px; border-radius: 8px; padding: 8px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+button.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); min-width: 84px; }
+button:hover { border-color: var(--ink-2); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.iter { font-family: var(--font-mono); font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 110px; }
+
+.keyrow { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--ink-2); align-items: center; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.sw { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: 4px; margin-right: 6px; }
+
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .btns { margin-left: 0; } }
+@media (max-width: 620px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; display: grid; gap: 6px; align-content: start; }
+.panel h2 { font-family: var(--font-display); font-weight: 500; font-size: 17px; margin: 0; }
+.panel .blurb { color: var(--ink-2); font-size: 13.5px; margin: 0; min-height: 2.6em; }
+.math { display: grid; gap: 3px; }
+.math pre { margin: 0 0 4px; font-size: 11.5px; padding: 7px 9px; min-height: 4.2em; }
+.tag { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.plotbox { position: relative; width: 100%; aspect-ratio: 1 / 1; max-width: 100%; }
+.plotbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.minibox { position: relative; width: 100%; height: 96px; }
+.minibox canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.nums { font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink); display: flex; flex-wrap: wrap; gap: 2px 14px; }
+.nums .lbl { color: var(--ink-2); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.card > h2 { font-family: var(--font-display); font-weight: 500; font-size: 20px; margin: 0 0 4px; }
+.card > .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 12px; max-width: 80ch; }
+h3 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 880px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 14px; }
+@media (max-width: 1000px) { .rules { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .rules { grid-template-columns: minmax(0, 1fr); } }
+.rule { border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.kicker { font-size: 13px; color: var(--ink-2); margin: 0 0 8px; }
+code { font-family: var(--font-mono); font-size: 13px; }
+pre { font-family: var(--font-mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 0 0 8px; line-height: 1.55; }
+.note { font-size: 14px; color: var(--ink-2); margin: 8px 0 0; max-width: 72ch; }
+ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+ol li { max-width: 72ch; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Self-Play Orbits</h1>
+    <p>Six learning rules play biased rock-paper-scissors (rock beating scissors pays 2 instead of 1) from the same starting policies, side by side and in lockstep. In each panel, the blue dot is the policy being played now and the orange dot is the average of every policy played so far. Click any plot to set a new starting policy for all six.</p>
+  </header>
+
+  <div class="controls">
+    <label class="ctl"><span>Step size η <b class="val" id="etaVal"></b></span>
+      <input type="range" id="eta" min="0.01" max="0.5" step="0.01" value="0.1">
+    </label>
+    <label class="ctl"><span>Magnet strength τ <b class="val" id="tauVal"></b></span>
+      <input type="range" id="tau" min="0.05" max="1" step="0.05" value="0.5">
+    </label>
+    <label class="ctl"><span>APMD reset every K <b class="val" id="kVal"></b></span>
+      <input type="range" id="K" min="10" max="1000" step="10" value="100">
+    </label>
+    <label class="ctl"><span>EMA rate ρ</span>
+      <select id="rho">
+        <option value="0.5">0.5 (fast)</option>
+        <option value="0.05" selected>0.05</option>
+        <option value="0.005">0.005</option>
+        <option value="0.0005">0.0005 (slow)</option>
+      </select>
+    </label>
+    <label class="ctl"><span>Speed</span>
+      <select id="speed">
+        <option value="1">1 step / frame</option>
+        <option value="4" selected>4 steps / frame</option>
+        <option value="20">20 steps / frame</option>
+      </select>
+    </label>
+    <div class="btns">
+      <span class="iter" id="iter">iteration 0</span>
+      <button class="primary" id="play">Play</button>
+      <button id="stepBtn">Step</button>
+      <button id="reset">Reset</button>
+    </div>
+  </div>
+
+  <div class="keyrow">
+    <span><span class="dot" style="background:var(--cur)"></span>current policy (trail fades with age)</span>
+    <span><span class="dot" style="background:var(--avg)"></span>average policy</span>
+    <span>★ Nash equilibrium</span>
+    <span>◆ magnet (dashed line: past magnets)</span>
+    <span id="keyP1">○ player 1's current policy</span>
+    <span id="gameNote"></span>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <section class="card">
+    <h2>Predict, then run</h2>
+    <p class="sub">Reset, make a guess for each, then press Play.</p>
+    <ol>
+      <li>Which panels will have a blue dot that settles? Which will only have an orange dot that settles?</li>
+      <li>Of the panels where the blue dot settles, which will settle exactly on the ★ in biased rock-paper-scissors?</li>
+      <li>Drag τ down to 0.05. Which panel changes the most, and why?</li>
+      <li>Drag K down to 10, then up to 1000. Does resetting more often always help APMD?</li>
+      <li>Set the EMA rate to 0.5. Compare with 0.05.</li>
+    </ol>
+  </section>
+
+  <section class="card">
+    <h2>The update rules</h2>
+    <p class="sub">Every rule has the same inputs at each decision: the current policy <code>pi</code> and <code>q[a]</code>, the expected payoff of each action against the opponent's current policy. They differ in what they optimize, what state they keep, and how they turn it into the next policy.</p>
+    <div class="two">
+      <div>
+        <h3>The game and its goal</h3>
+<pre>A[a][b]     payoff to player 0 when 0 plays a, 1 plays b
+            (player 1 gets −A[a][b])
+q_0 = A y,  q_1 = −Aᵀ x     each action's payoff vs the other's policy
+v = Σ_a π(a) q(a)           value of the current policy
+
+goal (Nash):   max_x min_y  xᵀ A y
+exploitability e(x, y) = ½ [ max_a (A y)_a − min_b (xᵀ A)_b ]
+                       = 0 exactly at a Nash equilibrium</pre>
+      </div>
+      <div>
+        <h3>Shared inputs, in code</h3>
+<pre>v   = pi @ q        # value of the current policy
+adv = q - v         # advantage == instantaneous regret</pre>
+        <h3 style="margin-top:12px">Where the objectives come from</h3>
+        <p class="note" style="margin-top:0"><b>Policy gradient</b> ascends each player's own payoff with the opponent frozen. <b>Regret matching</b> optimizes no fixed function, because each q_t depends on the opponent's next move. Its update is chosen so the next advantage vector is orthogonal to R⁺ (<code>Σ_a R⁺(a)(q(a) − v) = 0</code>, derived). Then <code>Φ = Σ_a (R⁺(a))²</code> grows at most linearly, so regret ≤ √Φ = O(√T) (Hart and Mas-Colell, cited). When both players have average regret ε, the average policies form a 2ε-Nash equilibrium (cited). The <b>magnet</b> rules solve a KL-regularized game; one step is the mirror-descent update<br><code>π' = argmax_π  η π·q − KL(π ‖ π_t) − ητ KL(π ‖ m)</code>,<br>whose closed form is the logit update shown (derived).</p>
+      </div>
+    </div>
+    <div class="two" style="margin-top:12px">
+      <div>
+        <h3>The average every rule can report (orange)</h3>
+<pre>avg_num += w_t * pi     # w_t = t for CFR+, 1 otherwise
+avg_den += w_t
+avg = avg_num / avg_den</pre>
+      </div>
+    </div>
+    <div class="rules">
+      <div class="rule">
+        <h3>Policy gradient</h3>
+        <p class="kicker">State: logits θ. One step from where you are.</p>
+<pre>def pg_update(theta, pi, q, t, lr):
+    adv = q - pi @ q
+    theta = theta + lr * pi * adv
+    return theta, softmax(theta)</pre>
+      </div>
+      <div class="rule">
+        <h3>Regret matching</h3>
+        <p class="kicker">State: regret totals R. No step size.</p>
+<pre>def rm_update(R, pi, q, t):
+    R = R + (q - pi @ q)
+    return R, regret_matching(R)</pre>
+      </div>
+      <div class="rule">
+        <h3>Regret matching+ (CFR+)</h3>
+        <p class="kicker">Clipped totals; players take turns.</p>
+<pre>def rmplus_update(R, pi, q, t):
+    R = np.maximum(R + (q - pi @ q), 0)
+    return R, regret_matching(R)
+# player 1's q uses player 0's NEW pi</pre>
+      </div>
+      <div class="rule">
+        <h3>Magnet, fixed uniform</h3>
+        <p class="kicker">State: logits θ, pulled toward magnet m.</p>
+<pre>def magnet_update(theta, pi, q, t, lr, tau, m):
+    theta = (theta + lr * q
+             + lr * tau * np.log(m)) / (1 + lr * tau)
+    return theta, softmax(theta)
+
+m = uniform        # never changes</pre>
+      </div>
+      <div class="rule">
+        <h3>Magnet, APMD resets</h3>
+        <p class="kicker">Magnet jumps to the current policy every K steps.</p>
+<pre>m = pi0                       # start: the initial policy
+for t in range(T):
+    if t > 0 and t % K == 0:
+        m = pi.copy()         # reference reset
+    theta, pi = magnet_update(theta, pi, q, t, lr, tau, m)</pre>
+      </div>
+      <div class="rule">
+        <h3>Magnet, EMA</h3>
+        <p class="kicker">Magnet drifts toward the current policy at rate ρ.</p>
+<pre>m = pi0
+for t in range(T):
+    theta, pi = magnet_update(theta, pi, q, t, lr, tau, m)
+    m = (1 - rho) * m + rho * pi</pre>
+      </div>
+    </div>
+    <div class="two">
+      <div>
+        <h3>Where each one stops</h3>
+        <p class="note" style="margin-top:0">Setting the magnet update's new logits equal to the old ones gives <code>pi[a] ∝ m[a] · exp(q[a] / τ)</code>. At the true equilibrium every q is equal, so a fixed point there requires pi = m. A fixed magnet only lands on the ★ if it sits on the ★. A moving magnet (APMD, EMA) can, because at its own fixed point m = pi.</p>
+      </div>
+      <div>
+        <h3>In a game tree like Kuhn poker</h3>
+        <p class="note" style="margin-top:0">Each information set gets its own q. Policy gradient weights each history by <code>reach_self · reach_opp</code> and estimates it by sampling games. CFR uses <code>cfv(I, a) = Σ reach_opp(h) · q(h, a)</code>, computed exactly, without <code>reach_self</code>. The average policy then weights each iteration by <code>reach_self</code>.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const GAMES = {
+  mp: { name: "Matching pennies", acts: ["H", "T"], A: [[1, -1], [-1, 1]], nash: [[.5, .5], [.5, .5]], start: [[.85, .15], [.3, .7]],
+        note: "x: player 0's P(heads). y: player 1's P(heads)." },
+  rps: { name: "Rock-paper-scissors", acts: ["R", "P", "S"], A: [[0, -1, 1], [1, 0, -1], [-1, 1, 0]], nash: [[1/3, 1/3, 1/3], [1/3, 1/3, 1/3]], start: [[.7, .2, .1], [.2, .2, .6]],
+        note: "Triangle: player 0's policy. Corners are pure strategies." },
+  brps: { name: "Biased rock-paper-scissors", acts: ["R", "P", "S"], A: [[0, -1, 2], [1, 0, -1], [-2, 1, 0]], nash: [[.25, .5, .25], [.25, .5, .25]], start: [[.7, .2, .1], [.2, .2, .6]],
+        note: "Rock beats scissors for 2, so the ★ sits at R 1/4, P 1/2, S 1/4." },
+};
+const LEARNERS = [
+  { id: "pg", name: "Policy gradient", kind: "pg", alt: false, blurb: "Exact softmax policy gradient. Moves toward what beats the opponent right now.",
+    obj: "max_θ  J(θ) = Σ_a π_θ(a) q(a)\n(opponent held fixed)",
+    upd: "θ(a) ← θ(a) + η π(a) (q(a) − v)\nπ = softmax(θ)" },
+  { id: "rm", name: "Regret matching", kind: "rm", alt: false, blurb: "Plays in proportion to positive regret totals. CFR's rule at one decision.",
+    objLabel: "Goal (not optimized directly)",
+    obj: "regret  max_a Σ_t q_t(a) − Σ_t v_t = o(T)\nwhy π ∝ R⁺:  Σ_a R⁺(a)(q(a) − v) = 0",
+    upd: "R(a) ← R(a) + q(a) − v\nπ(a) = [R(a)]⁺ / Σ_b [R(b)]⁺" },
+  { id: "rmp", name: "Regret matching+ (CFR+)", kind: "rmp", alt: true, blurb: "Totals clipped at 0, players alternate, later iterations weigh more in the average.",
+    objLabel: "Goal (not optimized directly)",
+    obj: "same as regret matching; clipped\ntotals R ≥ true regret, so bound R",
+    upd: "R(a) ← max(R(a) + q(a) − v, 0)\nπ(a) = R(a) / Σ_b R(b)" },
+  { id: "uni", name: "Magnet, fixed uniform", kind: "mag", magnet: "uni", alt: false, blurb: "Policy gradient pulled toward the uniform policy with strength τ.",
+    obj: "max_π  Σ_a π(a) q(a) − τ KL(π ‖ m)\nm = uniform, fixed",
+    upd: "θ(a) ← (θ(a) + η q(a) + ητ log m(a))\n       / (1 + ητ)" },
+  { id: "apmd", name: "Magnet, APMD resets", kind: "mag", magnet: "apmd", alt: false, blurb: "Same pull, but the magnet jumps to the current policy every K steps.",
+    obj: "block k: max_π Σ_a π(a) q(a) − τ KL(π ‖ m_k)\nm_{k+1} = π at the end of block k",
+    upd: "magnet update with m = m_k\nevery K steps:  m ← π" },
+  { id: "ema", name: "Magnet, EMA", kind: "mag", magnet: "ema", alt: false, blurb: "Same pull, but the magnet is a moving average of past policies.",
+    obj: "no single objective: the magnet's\nobjective moves every step",
+    upd: "magnet update with m = m_t\nm ← (1 − ρ) m + ρ π" },
+];
+
+const $ = id => document.getElementById(id);
+const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+const matvec = (A, y) => A.map(row => dot(row, y));
+const vecmat = (x, A) => A[0].map((_, j) => A.reduce((s, row, i) => s + x[i] * row[j], 0));
+const softmax = th => { const m = Math.max(...th); const e = th.map(v => Math.exp(v - m)); const z = e.reduce((a, b) => a + b, 0); return e.map(v => v / z); };
+const regretMatch = R => { const p = R.map(v => Math.max(v, 0)); const z = p.reduce((a, b) => a + b, 0); return z > 0 ? p.map(v => v / z) : R.map(() => 1 / R.length); };
+const expl = (A, x, y) => (Math.max(...matvec(A, y)) - Math.min(...vecmat(x, A))) / 2;
+const MAX_T = 20000;
+
+let start = null, playing = false, T = 0;
+
+function cfg() {
+  return { game: "brps", eta: +$("eta").value, tau: +$("tau").value, K: +$("K").value, rho: +$("rho").value };
+}
+
+/* ---------- learners ---------- */
+function resetLearner(L, c) {
+  const G = GAMES[c.game];
+  const pols = (start && start.game === c.game ? start.pols : G.start).map(p => p.slice());
+  Object.assign(L, {
+    pols,
+    th: pols.map(p => p.map(v => Math.log(v))),
+    R: pols.map(p => p.slice()),           // regret totals proportional to the start policy, so regret matching starts there
+    avgN: pols.map(p => p.map(() => 0)), avgD: 0,
+    hist: [],
+    mag: pols.map(p => p.slice()),         // APMD and EMA magnets start at the initial policy
+    magHist: [pols.map(p => p.slice())],
+    hoverT: null,
+  });
+}
+function magnetOf(L, c) {
+  if (L.magnet === "uni") return GAMES[c.game].nash.map(p => p.map(() => 1 / p.length));
+  return L.mag;
+}
+const avgPol = (L, i) => L.avgD > 0 ? L.avgN[i].map(v => v / L.avgD) : L.pols[i];
+
+function updatePlayer(L, i, q, c) {
+  const pi = L.pols[i], v = dot(pi, q);
+  if (L.kind === "pg") {
+    L.th[i] = L.th[i].map((t, a) => t + c.eta * pi[a] * (q[a] - v));
+    L.pols[i] = softmax(L.th[i]);
+  } else if (L.kind === "mag") {
+    const m = magnetOf(L, c)[i];
+    L.th[i] = L.th[i].map((t, a) => (t + c.eta * q[a] + c.eta * c.tau * Math.log(m[a])) / (1 + c.eta * c.tau));
+    L.pols[i] = softmax(L.th[i]);
+  } else if (L.kind === "rm") {
+    L.R[i] = L.R[i].map((r, a) => r + q[a] - v);
+    L.pols[i] = regretMatch(L.R[i]);
+  } else {
+    L.R[i] = L.R[i].map((r, a) => Math.max(r + q[a] - v, 0));
+    L.pols[i] = regretMatch(L.R[i]);
+  }
+}
+
+function stepLearner(L, c, t) {
+  const A = GAMES[c.game].A;
+  if (L.magnet === "apmd" && t > 1 && (t - 1) % c.K === 0) {
+    L.mag = L.pols.map(p => p.slice());
+    L.magHist.push(L.mag.map(p => p.slice()));
+  }
+  const w = L.kind === "rmp" ? t : 1;
+  for (let i = 0; i < 2; i++) L.avgN[i] = L.avgN[i].map((v, a) => v + w * L.pols[i][a]);
+  L.avgD += w;
+  const [x, y] = L.pols, ax = avgPol(L, 0), ay = avgPol(L, 1);
+  L.hist.push({ cur: [x.slice(), y.slice()], avg: [ax, ay], ec: expl(A, x, y), ea: expl(A, ax, ay) });
+  if (L.alt) {
+    updatePlayer(L, 0, matvec(A, y), c);
+    updatePlayer(L, 1, vecmat(L.pols[0], A).map(v => -v), c);
+  } else {
+    const q0 = matvec(A, y), q1 = vecmat(x, A).map(v => -v);
+    updatePlayer(L, 0, q0, c);
+    updatePlayer(L, 1, q1, c);
+  }
+  if (L.magnet === "ema") {
+    L.mag = L.mag.map((m, i) => m.map((v, a) => (1 - c.rho) * v + c.rho * L.pols[i][a]));
+    if (t % 10 === 0) L.magHist.push(L.mag.map(p => p.slice()));
+  }
+}
+
+function resetAll() { T = 0; const c = cfg(); LEARNERS.forEach(L => resetLearner(L, c)); drawAll(); }
+function stepAll() {
+  if (T >= MAX_T) { setPlaying(false); return; }
+  T += 1; const c = cfg();
+  LEARNERS.forEach(L => stepLearner(L, c, T));
+}
+
+/* ---------- panels ---------- */
+const grid = $("grid");
+LEARNERS.forEach(L => {
+  const el = document.createElement("section");
+  el.className = "panel";
+  el.innerHTML = `<h2>${L.name}</h2><p class="blurb">${L.blurb}</p>
+    <div class="math"><span class="tag">${L.objLabel || "Objective"}</span><pre>${L.obj}</pre><span class="tag">Update</span><pre>${L.upd}</pre></div>
+    <div class="plotbox"><canvas aria-label="${L.name}: policy trajectory"></canvas></div>
+    <div class="minibox"><canvas aria-label="${L.name}: exploitability over iterations"></canvas></div>
+    <div class="nums"></div>`;
+  grid.append(el);
+  L.plot = el.querySelector(".plotbox canvas");
+  L.mini = el.querySelector(".minibox canvas");
+  L.nums = el.querySelector(".nums");
+  L.plot.addEventListener("click", e => {
+    const c = cfg(), G = GAMES[c.game], r = L.plot.getBoundingClientRect();
+    const g = geom(c.game, r.width, r.height);
+    let pols = g.unmap(e.clientX - r.left, e.clientY - r.top);
+    const clean = p => { const q = p.map(v => Math.min(Math.max(v, 0.02), 1)); const z = q.reduce((a, b) => a + b, 0); return q.map(v => v / z); };
+    pols = c.game === "mp" ? pols.map(clean) : [clean(pols[0]), start && start.game === c.game ? start.pols[1] : G.start[1]];
+    start = { game: c.game, pols };
+    setPlaying(false); resetAll();
+  });
+  L.mini.addEventListener("mousemove", e => {
+    if (!L.hist.length || !L.miniGeom) return;
+    const r = L.mini.getBoundingClientRect(), { m, pw, Tmax } = L.miniGeom;
+    const t = Math.round(((e.clientX - r.left - m.l) / pw) * Tmax);
+    L.hoverT = t >= 1 && t <= L.hist.length ? t : null;
+    drawPanel(L, cfg());
+  });
+  L.mini.addEventListener("mouseleave", () => { L.hoverT = null; drawPanel(L, cfg()); });
+});
+
+/* ---------- drawing ---------- */
+let TOK = {};
+function readTokens() {
+  const s = getComputedStyle(document.documentElement);
+  for (const k of ["--ink", "--ink-2", "--grid", "--line", "--surface", "--cur", "--avg", "--font-body", "--font-mono"]) TOK[k] = s.getPropertyValue(k).trim();
+}
+function fit(canvas) {
+  const r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  return [ctx, r.width, r.height];
+}
+
+function geom(game, W, H) {
+  if (game === "mp") {
+    const m = { l: 34, r: 10, t: 10, b: 30 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    return {
+      kind: "sq", m, pw, ph,
+      map: pols => [m.l + pols[0][0] * pw, m.t + (1 - pols[1][0]) * ph],
+      unmap: (px, py) => { const a = (px - m.l) / pw, b = 1 - (py - m.t) / ph; return [[a, 1 - a], [b, 1 - b]]; },
+    };
+  }
+  const pad = 26, side = Math.min(W - 2 * pad, (H - 2 * pad) / (Math.sqrt(3) / 2));
+  const h = side * Math.sqrt(3) / 2, ox = (W - side) / 2, oy = (H - h) / 2 + 4;
+  const V = [[ox + side / 2, oy], [ox, oy + h], [ox + side, oy + h]];
+  const bary = p => [p[0] * V[0][0] + p[1] * V[1][0] + p[2] * V[2][0], p[0] * V[0][1] + p[1] * V[1][1] + p[2] * V[2][1]];
+  return {
+    kind: "tri", V, bary,
+    map: pols => bary(pols[0]),
+    mapP1: pols => bary(pols[1]),
+    unmap: (px, py) => {
+      const [x1, y1] = V[0], [x2, y2] = V[1], [x3, y3] = V[2];
+      const d = (y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3);
+      const a = ((y2 - y3) * (px - x3) + (x3 - x2) * (py - y3)) / d;
+      const b = ((y3 - y1) * (px - x3) + (x1 - x3) * (py - y3)) / d;
+      return [[a, b, 1 - a - b]];
+    },
+  };
+}
+
+function drawBackground(ctx, g, W, H) {
+  ctx.font = `12px ${TOK["--font-body"]}`;
+  if (g.kind === "sq") {
+    const { m, pw, ph } = g;
+    ctx.strokeStyle = TOK["--grid"]; ctx.lineWidth = 1;
+    for (const v of [.25, .5, .75]) {
+      ctx.beginPath(); ctx.moveTo(m.l + v * pw, m.t); ctx.lineTo(m.l + v * pw, m.t + ph); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(m.l, m.t + v * ph); ctx.lineTo(m.l + pw, m.t + v * ph); ctx.stroke();
+    }
+    ctx.strokeStyle = TOK["--line"]; ctx.strokeRect(m.l, m.t, pw, ph);
+    ctx.strokeStyle = TOK["--ink-2"]; ctx.globalAlpha = .25; ctx.lineWidth = 1;
+    for (let i = 1; i < 8; i++) for (let j = 1; j < 8; j++) {
+      const p = i / 8, q = j / 8;
+      let dx = 2 * q - 1, dy = -(2 * p - 1); const n = Math.hypot(dx, dy); if (n < 1e-6) continue; dx /= n; dy /= n;
+      const x0 = m.l + p * pw, y0 = m.t + (1 - q) * ph, L = Math.min(pw, ph) * 0.04;
+      const x1 = x0 + dx * L, y1 = y0 - dy * L, ang = Math.atan2(y1 - y0, x1 - x0);
+      ctx.beginPath(); ctx.moveTo(x0 - dx * L, y0 + dy * L); ctx.lineTo(x1, y1);
+      ctx.lineTo(x1 - 4 * Math.cos(ang - .5), y1 - 4 * Math.sin(ang - .5));
+      ctx.moveTo(x1, y1); ctx.lineTo(x1 - 4 * Math.cos(ang + .5), y1 - 4 * Math.sin(ang + .5)); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = TOK["--ink-2"]; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (const v of [0, .5, 1]) ctx.fillText(String(v), m.l + v * pw, m.t + ph + 4);
+    ctx.textAlign = "right"; ctx.textBaseline = "middle";
+    for (const v of [0, .5, 1]) ctx.fillText(String(v), m.l - 6, m.t + (1 - v) * ph);
+    ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillText("P0: P(heads)", m.l + pw / 2, H - 2);
+  } else {
+    const { V, bary } = g;
+    ctx.strokeStyle = TOK["--grid"]; ctx.lineWidth = 1;
+    for (const k of [1 / 3, 2 / 3]) for (let i = 0; i < 3; i++) {
+      const j = (i + 1) % 3, l = (i + 2) % 3, p1 = [0, 0, 0], p2 = [0, 0, 0];
+      p1[i] = k; p1[j] = 1 - k; p2[i] = k; p2[l] = 1 - k;
+      const [ax, ay] = bary(p1), [bx, by] = bary(p2);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+    ctx.strokeStyle = TOK["--line"]; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(...V[0]); ctx.lineTo(...V[1]); ctx.lineTo(...V[2]); ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = TOK["--ink"]; ctx.font = `600 12px ${TOK["--font-body"]}`;
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText("Rock", V[0][0], V[0][1] - 4);
+    ctx.textBaseline = "top"; ctx.textAlign = "left"; ctx.fillText("Paper", V[1][0] - 2, V[1][1] + 4);
+    ctx.textAlign = "right"; ctx.fillText("Scissors", V[2][0] + 2, V[2][1] + 4);
+  }
+}
+
+function drawPlot(L, c) {
+  const G = GAMES[c.game];
+  const [ctx, W, H] = fit(L.plot);
+  ctx.clearRect(0, 0, W, H);
+  const g = geom(c.game, W, H);
+  drawBackground(ctx, g, W, H);
+
+  // magnet path and magnet
+  if (L.kind === "mag") {
+    if (L.magnet !== "uni" && L.magHist.length > 1) {
+      ctx.strokeStyle = TOK["--ink-2"]; ctx.lineWidth = 1.2; ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      L.magHist.forEach((m, k) => { const [x, y] = g.map(m); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      const [lx, ly] = g.map(L.mag); ctx.lineTo(lx, ly);
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    const [mx, my] = g.map(magnetOf(L, c));
+    ctx.fillStyle = TOK["--ink-2"]; ctx.save(); ctx.translate(mx, my); ctx.rotate(Math.PI / 4); ctx.fillRect(-4.5, -4.5, 9, 9); ctx.restore();
+  }
+
+  // Nash star
+  const [nx, ny] = g.map(G.nash);
+  ctx.fillStyle = TOK["--ink"]; ctx.font = `18px ${TOK["--font-body"]}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("★", nx, ny);
+
+  // start
+  const first = L.hist.length ? L.hist[0].cur : L.pols;
+  const [sx, sy] = g.map(first);
+  ctx.strokeStyle = TOK["--ink-2"]; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(sx, sy, 5, 0, 2 * Math.PI); ctx.stroke();
+
+  // average path
+  if (L.hist.length > 1) {
+    ctx.strokeStyle = TOK["--avg"]; ctx.lineWidth = 2; ctx.beginPath();
+    const stride = Math.max(1, Math.floor(L.hist.length / 2000));
+    for (let k = 0; k < L.hist.length; k += stride) { const [x, y] = g.map(L.hist[k].avg); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+  }
+  // current trail
+  const hs = L.hist.slice(-600);
+  ctx.strokeStyle = TOK["--cur"]; ctx.lineWidth = 2;
+  for (let k = 1; k < hs.length; k++) {
+    ctx.globalAlpha = 0.08 + 0.92 * (k / hs.length);
+    const [x0, y0] = g.map(hs[k - 1].cur), [x1, y1] = g.map(hs[k].cur);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  const disc = (x, y, col) => { ctx.fillStyle = col; ctx.strokeStyle = TOK["--surface"]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 6.5, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); };
+  if (g.kind === "tri") {
+    const [px, py] = g.mapP1(L.pols);
+    ctx.strokeStyle = TOK["--cur"]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(px, py, 6, 0, 2 * Math.PI); ctx.stroke();
+  }
+  const [ax, ay] = g.map([avgPol(L, 0), avgPol(L, 1)]);
+  disc(ax, ay, TOK["--avg"]);
+  const [cx, cy] = g.map(L.pols);
+  disc(cx, cy, TOK["--cur"]);
+}
+
+function drawMini(L) {
+  const [ctx, W, H] = fit(L.mini);
+  ctx.clearRect(0, 0, W, H);
+  const m = { l: 40, r: 8, t: 6, b: 18 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const Tmax = Math.max(200, Math.ceil(L.hist.length / 200) * 200);
+  const lo = -4, hi = 0.3;
+  const X = t => m.l + (t / Tmax) * pw;
+  const Y = e => m.t + (1 - (Math.log10(Math.max(e, 1e-4)) - lo) / (hi - lo)) * ph;
+  L.miniGeom = { m, pw, Tmax };
+  ctx.font = `10.5px ${TOK["--font-mono"]}`; ctx.strokeStyle = TOK["--grid"]; ctx.lineWidth = 1;
+  ctx.fillStyle = TOK["--ink-2"]; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (const k of [0, -2, -4]) { const y = Y(10 ** k); ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(m.l + pw, y); ctx.stroke(); ctx.fillText(k === 0 ? "1" : `1e${k}`, m.l - 5, y); }
+  ctx.textAlign = "left"; ctx.textBaseline = "top"; ctx.fillText("0", m.l, m.t + ph + 4);
+  ctx.textAlign = "right"; ctx.fillText(String(Tmax), m.l + pw, m.t + ph + 4);
+  ctx.textAlign = "center"; ctx.fillText("exploitability, log scale", m.l + pw / 2, m.t + ph + 4);
+  const line = (key, col) => {
+    if (!L.hist.length) return;
+    ctx.strokeStyle = col; ctx.lineWidth = 1.8; ctx.beginPath();
+    const stride = Math.max(1, Math.floor(L.hist.length / 800));
+    for (let k = 0; k < L.hist.length; k += stride) { const x = X(k + 1), y = Y(L.hist[k][key]); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.lineTo(X(L.hist.length), Y(L.hist[L.hist.length - 1][key]));
+    ctx.stroke();
+  };
+  line("ec", TOK["--cur"]); line("ea", TOK["--avg"]);
+  if (L.hoverT) {
+    ctx.strokeStyle = TOK["--ink-2"]; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(X(L.hoverT), m.t); ctx.lineTo(X(L.hoverT), m.t + ph); ctx.stroke(); ctx.setLineDash([]);
+    const h = L.hist[L.hoverT - 1];
+    for (const [v, col] of [[h.ec, TOK["--cur"]], [h.ea, TOK["--avg"]]]) { ctx.fillStyle = col; ctx.strokeStyle = TOK["--surface"]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(L.hoverT), Y(v), 4, 0, 2 * Math.PI); ctx.fill(); ctx.stroke(); }
+  }
+}
+
+function drawNums(L, c) {
+  const A = GAMES[c.game].A;
+  let t, ec, ea;
+  if (L.hoverT) { const h = L.hist[L.hoverT - 1]; t = L.hoverT; ec = h.ec; ea = h.ea; }
+  else { t = T; ec = expl(A, L.pols[0], L.pols[1]); ea = expl(A, avgPol(L, 0), avgPol(L, 1)); }
+  L.nums.innerHTML = `<span class="lbl">${L.hoverT ? `at iteration ${t}` : "now"}</span>` +
+    `<span><span class="dot" style="background:var(--cur)"></span>${ec.toExponential(2)}</span>` +
+    `<span><span class="dot" style="background:var(--avg)"></span>${ea.toExponential(2)}</span>`;
+}
+
+function drawPanel(L, c) { drawPlot(L, c); drawMini(L); drawNums(L, c); }
+function drawAll() {
+  readTokens();
+  const c = cfg(), G = GAMES[c.game];
+  LEARNERS.forEach(L => drawPanel(L, c));
+  $("iter").textContent = `iteration ${T}`;
+  $("etaVal").textContent = c.eta.toFixed(2);
+  $("tauVal").textContent = c.tau.toFixed(2);
+  $("kVal").textContent = c.K;
+  $("keyP1").hidden = c.game === "mp";
+  $("gameNote").textContent = G.note;
+}
+
+function setPlaying(p) { playing = p; $("play").textContent = p ? "Pause" : "Play"; }
+function loop() {
+  if (playing) { const n = +$("speed").value; for (let k = 0; k < n; k++) stepAll(); drawAll(); }
+  requestAnimationFrame(loop);
+}
+
+$("play").onclick = () => setPlaying(!playing);
+$("stepBtn").onclick = () => { setPlaying(false); stepAll(); drawAll(); };
+$("reset").onclick = () => { setPlaying(false); resetAll(); };
+for (const id of ["rho"]) $(id).onchange = () => { setPlaying(false); resetAll(); };
+for (const id of ["eta", "tau", "K"]) $(id).oninput = () => { setPlaying(false); resetAll(); };
+window.addEventListener("resize", drawAll);
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", drawAll);
+new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+resetAll();
+// open in a working state: run a first stretch so each orbit is visible at rest
+for (let k = 0; k < 800; k++) stepAll();
+drawAll();
+requestAnimationFrame(loop);
+</script>
+
+</html>

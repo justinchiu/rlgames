@@ -46,7 +46,8 @@ Roadmap step 1, `CFRPlus` in `rlgames/core/cfr.py`.
 - Why is weighting by your *own* reach a problem for a rarely reached infoset?
 - Would playing the argmax of regret (fictitious-play-like) keep `R⁺ · r = 0`? (optional)
 - Kuhn exercise on the Kuhn table page (Q1–6).
-- Whether Ataraxos collects and trains asynchronously (`π_old` staleness): not checked.
+- (Answered) Ataraxos collects and trains synchronously (`rl.py:270`), so `π_old` is one
+  collection round old. See `docs/comparison.md`.
 
 ## Next
 
@@ -60,6 +61,9 @@ Roadmap step 1, `CFRPlus` in `rlgames/core/cfr.py`.
 
 ## Teaching notes
 
+- Every lesson needs an interactive component (see `.claude/skills/viz/SKILL.md`).
+- Ask open, high-level questions and let the user construct definitions: give a hint at
+  what a quantity should capture (e.g. regret), then have the user define it.
 - State the point before asking for computation. The user pushed back on chains of
   fill-in arithmetic ("youre just asking me for random computation").
 - Recap any numbers the user needs instead of expecting them to remember earlier rounds.
@@ -67,6 +71,15 @@ Roadmap step 1, `CFRPlus` in `rlgames/core/cfr.py`.
 
 ## Pages
 
-- `docs/regret-matching.html`: regret matching explainer (in repo).
-- Kuhn poker table: https://claude.ai/artifact/VpaRD7HKUoEhSXpqDkX4pu
-- Self-play orbits on biased RPS: https://claude.ai/artifact/6hFtirsTvEa61t3sMQUWtY
+- `docs/play.html`: play every repo game against a bot, with your information set shown.
+  Rules verified against the Python engines; the Kuhn "Equilibrium" bot is exactly Nash.
+  At each of your decisions (and for every decision in the post-game review) it shows the
+  true history vs your observations, every history in your information set with chance,
+  `reach_opp`, `reach_self`, belief, `q(h, a)`, `value(h)`, and per action `σ`, `q̄`,
+  `cfv`, regret, the PG gradient, the RM policy, a magnet step, and a session regret tally.
+  Not computed for Connect Four.
+- `docs/selfplay-orbits.html`: self-play learners in parallel on biased RPS
+  (also https://claude.ai/artifact/6hFtirsTvEa61t3sMQUWtY).
+- `docs/kuhn-table.html`: Kuhn rules, playable hand, game tree, exercise
+  (also https://claude.ai/artifact/VpaRD7HKUoEhSXpqDkX4pu).
+- `docs/regret-matching.html`: regret matching explainer.
