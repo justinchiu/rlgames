@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regret Matching</title>
+<style>
+:root {
+  --bg: #fbfaf7; --fg: #1d1d1b; --muted: #5f5e58; --rule: #dedbd2;
+  --code-bg: #f1efe8; --accent: #2f5fa7; --pos: #2c7a4b; --neg: #a8402f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17181a; --fg: #e8e6e1; --muted: #a3a19a; --rule: #34363a;
+    --code-bg: #222428; --accent: #8db3ec; --pos: #7fc79a; --neg: #e59482;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17181a; --fg: #e8e6e1; --muted: #a3a19a; --rule: #34363a;
+  --code-bg: #222428; --accent: #8db3ec; --pos: #7fc79a; --neg: #e59482;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 17px/1.6 ui-serif, Georgia, "Times New Roman", serif;
+}
+main { max-width: 720px; margin: 0 auto; padding: 40px 16px 80px; }
+h1 { font-size: 2rem; margin: 0 0 4px; }
+.lede { color: var(--muted); margin: 0 0 32px; font-size: 1.05rem; }
+h2 {
+  font: 600 0.8rem/1.4 ui-sans-serif, system-ui, sans-serif;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+  margin: 40px 0 12px; padding-top: 16px; border-top: 1px solid var(--rule);
+}
+code, pre { font: 0.88em/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+ul, ol { padding-left: 1.3em; }
+li { margin: 6px 0; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font: 0.92rem/1.5 ui-sans-serif, system-ui, sans-serif; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; }
+td.num { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; }
+.pos { color: var(--pos); } .neg { color: var(--neg); }
+.callout {
+  border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 20px 0;
+}
+.exercise { background: var(--code-bg); border-radius: 8px; padding: 16px 20px; margin-top: 16px; }
+.exercise ol { margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Regret matching</h1>
+<p class="lede">A rule for choosing your next policy from your record so far: keep a running score
+per action, and play each action in proportion to how good its score looks.</p>
+
+<h2>The rule</h2>
+<p>For each action, keep a running total called its <strong>regret</strong>: how much more you
+would have won if you had always played that action instead of what you actually played.</p>
+<ul>
+  <li><strong>Update the tally.</strong> After each round, add <code>q(a) − v</code> to each
+  action's tally. <code>q(a)</code> is what action <code>a</code> would have earned this round;
+  <code>v</code> is what you actually earned in expectation. This <code>q − v</code> is the same
+  advantage as in policy gradient.</li>
+  <li><strong>Next policy.</strong> Play each action in proportion to its <em>positive</em> tally.
+  Actions whose tally is zero or below get probability 0. If no action has a positive tally,
+  play uniformly.</li>
+</ul>
+<pre><code>R(a) += q(a) - v                  # accumulate regret
+sigma(a) = max(R(a), 0) / sum_b max(R(b), 0)   # uniform if the sum is 0</code></pre>
+<p>In this repo, <code>regret_matching(regrets, legal)</code> in
+<code>rlgames/core/cfr.py</code> is the second line. The tally itself lives in CFR.</p>
+
+<h2>Example: RPS against an opponent who keeps playing rock</h2>
+<p>Payoffs are win +1, tie 0, loss −1. Actions are ordered (R, P, S).</p>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>round</th><th>your policy</th><th>q (R, P, S)</th><th>v</th><th>tally after (R, P, S)</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>uniform</td><td class="num">(0, <span class="pos">+1</span>, <span class="neg">−1</span>)</td><td class="num">0</td><td class="num">(0, <span class="pos">+1</span>, <span class="neg">−1</span>)</td></tr>
+    <tr><td>2</td><td>all paper</td><td class="num">(0, <span class="pos">+1</span>, <span class="neg">−1</span>)</td><td class="num">+1</td><td class="num">(<span class="neg">−1</span>, <span class="pos">+1</span>, <span class="neg">−3</span>)</td></tr>
+  </tbody>
+</table>
+</div>
+<p>After round 1, only paper has a positive tally, so you switch to all paper. In round 2 you
+are winning, so every alternative gains negative regret and you stay on paper.</p>
+
+<h2>What it is not</h2>
+<ul>
+  <li><strong>Not a best response.</strong> It does not jump to whatever beats the opponent's
+  <em>latest</em> move. Every past round counts equally in the tally, so one surprise does not
+  erase your history.</li>
+  <li><strong>Not a gradient step.</strong> There is no learning rate and no parameters. The
+  policy is recomputed from the totals each round. Policy gradient nudges logits by
+  <code>π·(q − v)</code>; regret matching sets <code>σ ∝ max(R, 0)</code> directly.</li>
+  <li><strong>The current policy is not what converges.</strong> In self-play the current policy
+  can keep cycling. The guarantee is that regret grows slowly (at most about √T), and by the
+  folk theorem that makes the <em>average</em> policy converge to an equilibrium.</li>
+</ul>
+
+<div class="callout">
+<p><strong>Not optimized directly.</strong> Policy gradient climbs a fixed function
+<code>J(θ) = Σ π(a) q(a)</code> you can evaluate now. Regret,
+<code>max_a Σ_t q_t(a) − Σ_t v_t</code>, depends on the whole history and on opponent moves you
+have not seen yet, so there is nothing to evaluate and push down this step. Regret matching
+is instead a rule with a worst-case guarantee: whatever sequence of <code>q</code>s arrives,
+regret stays sublinear.</p>
+</div>
+
+<h2>Your turn</h2>
+<div class="exercise">
+<p>In round 3 the opponent switches to <strong>scissors</strong>, and you are still playing all
+paper.</p>
+<ol>
+  <li>What are <code>q</code>, <code>v</code>, and the new tally?</li>
+  <li>What is your round 4 policy?</li>
+  <li>A best response to "the opponent just played scissors" is all rock. Why does regret
+  matching <em>not</em> go all rock here?</li>
+</ol>
+</div>
+</main>
+</body>
+</html>
