@@ -83,3 +83,5 @@ Roadmap step 1, `CFRPlus` in `rlgames/core/cfr.py`.
 - `docs/kuhn-table.html`: Kuhn rules, playable hand, game tree, exercise
   (also https://claude.ai/artifact/VpaRD7HKUoEhSXpqDkX4pu).
 - `docs/regret-matching.html`: regret matching explainer.
+- `docs/related-work.md`: papers on self-play cycling and the three fixes (averaging,
+  optimism, magnets), with citations checked.
